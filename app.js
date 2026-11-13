@@ -135,7 +135,7 @@ function guessCat(s){
   ["لبس وجزم",/لبس|قميص|بنطلون|جزم|جزمه|كوتش|شبشب|فستان|بدله|تيشيرت/],
   ["سجاير",/سجاير|سجائر|علبة|معسل|شيشه|شيشة/],
   ["قهوة وشاي ومشروبات",/قهوه|قهوة|شاي|نسكافيه|عصير|كافيه|بيبسي|كوكا|مشروب|ميه معدني|مياه معدني/],
-  ["حلويات وتسالي",/حلويات|شيكولات|شوكولات|بسكوت|شيبسي|لب|سوداني|ايس كريم|آيس/],
+  ["حلويات وتسالي",/حلويات|فينو|فيوري|باتيه|كيكة|شيكولات|شوكولات|بسكوت|شيبسي|لب|سوداني|ايس كريم|آيس/],
   ["عيش وفطار",/عيش|فول|طعميه|طعمية|فطار|جبن|بيض/],
   ["لحوم وفراخ وسمك",/لحم|فراخ|سمك|كفته|كبده|جمبري/],
   ["خضار وفاكهة",/خضار|فاكه|طماطم|بطاطس|بصل|موز|برتقال|تفاح|عنب|ليمون/],
@@ -215,17 +215,21 @@ function showPreview(){
     const list=draft.filter(x=>x.amount>0).map(x=>{const [y,m,dd]=base.split("-").map(Number);
       const dt=new Date(y,m-1,dd+(x.day_offset||0));
       return {type:x.type||"مصروف",item:x.item.trim()||"مصروف",amount:x.amount,category:x.category,date:iso(dt),ts:Date.now()}});
-    try{await addItems(list); setSt("اتحفظ "+list.length+" بند ✓"); draft=[]; lastParsed=""; clearTimeout(autoT); showPreview(); $("say").value="";}
+    try{await addItems(list); setSt("اتحفظ "+list.length+" بند ✓"); draft=[]; pvDirty=false; lastParsed=""; clearTimeout(autoT); showPreview(); $("say").value="";}
     catch(e){setSt("محصلش حفظ، جرب تاني",true); ok.disabled=false}
   };
   row.appendChild(ok); pv.appendChild(row);
 }
 function setSt(t,err){const s=$("st"); s.textContent=t; s.className="status"+(err?" err":"")}
 
-let parseSeq=0, lastParsed="", autoT=null;
-$("say").addEventListener("input",()=>{clearTimeout(autoT);
+let parseSeq=0, lastParsed="", autoT=null, quickT=null, pvDirty=false;
+$("pv").addEventListener("input",()=>{pvDirty=true}); $("pv").addEventListener("change",()=>{pvDirty=true});
+const quickParse=t=>localParse(t).map(x=>({...x,day_offset:/امبارح|إمبارح/.test(t)?-1:0}));
+$("say").addEventListener("input",()=>{clearTimeout(autoT);clearTimeout(quickT);
   if(!$("say").value.trim()){draft=[];lastParsed="";showPreview();setSt("");return}
-  autoT=setTimeout(()=>$("go").click(),1800)});
+  quickT=setTimeout(()=>{const t=$("say").value.trim();if(!t||pvDirty&&draft.length) return;
+    const q=quickParse(t); if(q.length){draft=q;pvDirty=false;showPreview();setSt("بتأكد من الفهم…")}},250);
+  autoT=setTimeout(()=>$("go").click(),900)});
 $("go").onclick=async()=>{
   const text=$("say").value.trim();
   if(!text){return}
@@ -234,9 +238,10 @@ $("go").onclick=async()=>{
   let res=null;
   try{res=await aiParse(text)}catch(e){res=null}
   if(!res||!res.length){res=localParse(text).map(x=>({...x,day_offset:/امبارح|إمبارح/.test(text)?-1:0}))}
-  if(my!==parseSeq) return;
+  if(my!==parseSeq||text!==$("say").value.trim()) return;
+  if(pvDirty&&draft.length){setSt("");return}
   if(!res.length){draft=[];showPreview();setSt("قول المبلغ مع كل حاجة، زي: عيش بعشرة جنيه",true);return}
-  draft=res; setSt(""); showPreview();
+  draft=res; pvDirty=false; setSt(""); showPreview();
 };
 
 /* ---------- المايك: الكلام بيتكتب وانت بتتكلم، وبعدها Gemini يسمع التسجيل ويطلّع البنود ---------- */
@@ -262,7 +267,7 @@ $("go").onclick=async()=>{
     return res;
   }
   function show(its){
-    if(its.length){draft=draft.concat(its);setSt("");showPreview()}
+    if(its.length){draft=draft.concat(its);pvDirty=false;setSt("");showPreview()}
     else setSt("مسمعتش مبلغ. قول الحاجة ومعاها سعرها",true);
   }
   b.onclick=async()=>{
@@ -295,7 +300,7 @@ $("go").onclick=async()=>{
     idle();
   };
 })();
-$("clr").onclick=()=>{clearTimeout(autoT);parseSeq++;lastParsed="";$("say").value="";draft=[];showPreview();setSt("")};
+$("clr").onclick=()=>{clearTimeout(autoT);clearTimeout(quickT);pvDirty=false;parseSeq++;lastParsed="";$("say").value="";draft=[];showPreview();setSt("")};
 showPreview();
 
 /* ---------- edit one entry ---------- */
