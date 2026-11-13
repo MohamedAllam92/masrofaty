@@ -1,15 +1,17 @@
 /**
  * مصروفاتي - الخادم (Google Apps Script)
- * بيتحط جوه شيت «دفتر مصروفاتي»: الإضافات ← Apps Script
+ * بيتحط جوه شيت «دفتر مصروفاتي»: Extensions ← Apps Script
  *
- * قبل التشغيل: من ⚙️ إعدادات المشروع ← خصائص النص البرمجي (Script properties) ضيف:
+ * من ⚙️ Project Settings ← Script properties ضيف:
  *   GEMINI_KEY = المفتاح اللي بيبدأ بـ AIza
- *   PIN        = رقم سري تختاره (مثلاً ٤ أو ٦ أرقام)
+ *   PIN        = رقم سري تختاره
+ *
+ * كل البيانات في تاب «قاعدة البيانات» (التطبيق والدفتر الاتنين بيقروا ويكتبوا فيه)
  */
 
 const SHEET_ID = '1XEaQft4984YhrdqVxFiSk-IMCsCAqJ_uOx2ZG6Z73bw';
-const TAB = 'وارد التطبيق';
-const HEAD = ['id', 'التاريخ', 'النوع', 'البند', 'التصنيف', 'المبلغ', 'الكلام', 'الحالة', 'وقت التسجيل'];
+const DB = 'قاعدة البيانات';
+const COLS = ['id', 'type', 'date', 'item', 'category', 'amount', 'ts', 'status', 'note', 'deleted', 'updated'];
 const MODELS = ['gemini-flash-latest', 'gemini-2.5-flash'];
 
 const CATS = ["مصروف البيت","بقالة وسوبرماركت","خضار وفاكهة","لحوم وفراخ وسمك","عيش وفطار","أكل برا وديليفري","قهوة وشاي ومشروبات","حلويات وتسالي","مواصلات","عربية وبنزين","إيجار وأقساط سكن","كهربا وميه وغاز","تليفون ونت","صيانة وتصليحات","أدوات منزلية ومنظفات","أولاد ومدارس","دروس وتعليم","دكاترة وتحاليل","أدوية وصيدلية","حلاقة وعناية شخصية","لبس وجزم","خروجات وترفيه","سفر ومصايف","هدايا ومناسبات","صدقات وزكاة","جمعيات وأقساط","اشتراكات ونادي","سجاير","شغل ومصاريف مهنية"];
@@ -20,22 +22,79 @@ function doPost(e) {
     const req = JSON.parse(e.postData.contents);
     const props = PropertiesService.getScriptProperties();
     if (!req.pin || String(req.pin) !== String(props.getProperty('PIN'))) return out({ ok: false, error: 'pin' });
-    if (req.action === 'ping') return out({ ok: true });
-    if (req.action === 'parse') return out(parse(req, props.getProperty('GEMINI_KEY')));
-    if (req.action === 'save') return out(save(req.items || []));
-    if (req.action === 'recent') return out(recent());
-    return out({ ok: false, error: 'action' });
+    switch (req.action) {
+      case 'ping': return out({ ok: true });
+      case 'parse': return out(parse(req, props.getProperty('GEMINI_KEY')));
+      case 'list': return out({ ok: true, docs: list() });
+      case 'put': return out(put(req.docs || []));
+      case 'del': return out(del(req.ids || []));
+      default: return out({ ok: false, error: 'action' });
+    }
   } catch (err) {
     return out({ ok: false, error: String(err && err.message || err) });
   }
 }
 
 function doGet() { return out({ ok: true, app: 'masrofaty' }); }
+function out(o) { return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON); }
 
-function out(o) {
-  return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON);
+/* ---------------- قاعدة البيانات ---------------- */
+function tab() {
+  const ss = SpreadsheetApp.openById(SHEET_ID);
+  let sh = ss.getSheetByName(DB);
+  if (!sh) {
+    sh = ss.insertSheet(DB);
+    sh.getRange(1, 1, 1, COLS.length).setValues([COLS]).setFontWeight('bold');
+    sh.setFrozenRows(1);
+    sh.getRange('A:K').setNumberFormat('@');
+  }
+  return sh;
 }
 
+function rows(sh) {
+  const n = sh.getLastRow() - 1;
+  return n < 1 ? [] : sh.getRange(2, 1, n, COLS.length).getValues();
+}
+
+function toDoc(r) {
+  const d = {};
+  COLS.forEach((c, i) => d[c] = r[i] === null ? '' : String(r[i]));
+  d.amount = +d.amount || 0; d.ts = +d.ts || 0; d.updated = +d.updated || 0;
+  return d;
+}
+
+function list() {
+  return rows(tab()).filter(r => r[0] && String(r[9]) !== '1').map(toDoc);
+}
+
+function put(docs) {
+  const lock = LockService.getScriptLock(); lock.waitLock(20000);
+  try {
+    const sh = tab(), all = rows(sh), at = {};
+    all.forEach((r, i) => { if (r[0]) at[String(r[0])] = i + 2; });
+    const now = Date.now(), add = [];
+    docs.forEach(d => {
+      if (!d || !d.id) return;
+      const row = COLS.map(c => c === 'updated' ? String(now) : c === 'deleted' ? '' : (d[c] === undefined || d[c] === null ? '' : String(d[c])));
+      if (at[d.id]) sh.getRange(at[d.id], 1, 1, COLS.length).setValues([row]);
+      else { add.push(row); at[d.id] = -1; }
+    });
+    if (add.length) sh.getRange(sh.getLastRow() + 1, 1, add.length, COLS.length).setValues(add);
+    return { ok: true, updated: now };
+  } finally { lock.releaseLock(); }
+}
+
+function del(ids) {
+  const lock = LockService.getScriptLock(); lock.waitLock(20000);
+  try {
+    const sh = tab(), all = rows(sh), now = String(Date.now()), want = {};
+    ids.forEach(i => want[String(i)] = 1);
+    all.forEach((r, i) => { if (want[String(r[0])]) sh.getRange(i + 2, 10, 1, 2).setValues([['1', now]]); });
+    return { ok: true };
+  } finally { lock.releaseLock(); }
+}
+
+/* ---------------- فهم الكلام بـ Gemini ---------------- */
 function prompt(today, typed) {
   return `انت بتسمع (أو بتقرا) كلام مصري عامي من شخص بيسجل مصروفاته ودخله بالجنيه المصري. النهارده ${today}.
 ${typed ? 'النص: «' + typed + '»' : 'اسمع التسجيل الصوتي المرفق.'}
@@ -45,7 +104,7 @@ ${typed ? 'النص: «' + typed + '»' : 'اسمع التسجيل الصوتي 
 لو عدد × سعر (٣ كيلو الكيلو بعشرين) احسب الإجمالي. لو مبلغ واحد على أكتر من حاجة خليه بند واحد.
 اسم البند قصير وواضح (كلمة لـ ٤ كلمات) من غير "صرفت" أو "اشتريت".
 تصنيف المصروف لازم يكون واحد من دول بالظبط: ${CATS.join('، ')}.
-أمثلة: مصروف الست/المدام/مراتي = "مصروف البيت"؛ فيوري أو فينو أو شيبسي = "حلويات وتسالي"؛ توكتوك أو مواصلات حمزة أو المدرسة أو الحضانة أو التمرين أو السباحة = "أولاد ومدارس"؛ درس حمزة = "دروس وتعليم"؛ اللحمة والفراخ = "لحوم وفراخ وسمك"؛ الحلاقة = "حلاقة وعناية شخصية".
+أمثلة: مصروف الست/المدام/مراتي = "مصروف البيت"؛ فيوري أو فينو أو شيبسي = "حلويات وتسالي"؛ توكتوك أو مواصلات حمزة أو المدرسة = "أولاد ومدارس" مش "مواصلات"؛ الحلاقة = "حلاقة وعناية شخصية"؛ الكشري = "أكل برا وديليفري".
 ممنوع "تاني" أو "أخرى": اختار أقرب تصنيف.
 تصنيف الدخل: "مرتب" للمرتب، وأي دخل تاني "دخل إضافي" واسم البند نوعه (مكافأة، لجنة، حافز…).
 "امبارح" = day_offset -1، "أول امبارح" = -2، غير كده 0.
@@ -58,10 +117,7 @@ function parse(req, key) {
   const parts = [];
   if (req.audio) parts.push({ inline_data: { mime_type: req.mime || 'audio/wav', data: req.audio } });
   parts.push({ text: prompt(today, req.text || '') });
-  const body = {
-    contents: [{ role: 'user', parts: parts }],
-    generationConfig: { responseMimeType: 'application/json', temperature: 0.1 }
-  };
+  const body = { contents: [{ role: 'user', parts: parts }], generationConfig: { responseMimeType: 'application/json', temperature: 0.1 } };
   let last = '';
   for (const m of MODELS) {
     const r = UrlFetchApp.fetch('https://generativelanguage.googleapis.com/v1beta/models/' + m + ':generateContent', {
@@ -70,16 +126,12 @@ function parse(req, key) {
     });
     if (r.getResponseCode() !== 200) { last = r.getResponseCode() + ' ' + r.getContentText().slice(0, 300); continue; }
     const j = JSON.parse(r.getContentText());
-    const txt = (((j.candidates || [])[0] || {}).content || {}).parts;
-    const s = (txt || []).map(p => p.text || '').join('').replace(/^```json|```$/g, '').trim();
-    const o = JSON.parse(s);
+    const p = (((j.candidates || [])[0] || {}).content || {}).parts || [];
+    const o = JSON.parse(p.map(x => x.text || '').join('').replace(/^```json|```$/g, '').trim());
     const items = (o.items || []).filter(x => x && +x.amount > 0).map(x => {
-      const inc = x.type === 'دخل';
-      const L = inc ? INC : CATS;
+      const inc = x.type === 'دخل', L = inc ? INC : CATS;
       return {
-        type: inc ? 'دخل' : 'مصروف',
-        item: String(x.item || 'مصروف').slice(0, 60),
-        amount: +x.amount,
+        type: inc ? 'دخل' : 'مصروف', item: String(x.item || 'مصروف').slice(0, 60), amount: +x.amount,
         category: L.indexOf(x.category) >= 0 ? x.category : (inc ? 'دخل إضافي' : 'مصروف البيت'),
         day_offset: Math.max(-7, Math.min(0, parseInt(x.day_offset, 10) || 0))
       };
@@ -89,50 +141,9 @@ function parse(req, key) {
   return { ok: false, error: 'gemini ' + last };
 }
 
-function tab() {
-  const ss = SpreadsheetApp.openById(SHEET_ID);
-  let sh = ss.getSheetByName(TAB);
-  if (!sh) {
-    sh = ss.insertSheet(TAB);
-    sh.getRange(1, 1, 1, HEAD.length).setValues([HEAD]).setFontWeight('bold').setBackground('#1E6A4C').setFontColor('#FFFFFF');
-    sh.setRightToLeft(true);
-    sh.setFrozenRows(1);
-  }
-  return sh;
-}
-
-function save(items) {
-  const lock = LockService.getScriptLock();
-  lock.waitLock(20000);
-  try {
-    const sh = tab();
-    const now = Utilities.formatDate(new Date(), 'Africa/Cairo', 'yyyy-MM-dd HH:mm');
-    const rows = items.filter(x => x && +x.amount > 0 && /^\d{4}-\d{2}-\d{2}$/.test(x.date || '')).map(x => [
-      x.id || Utilities.getUuid(), x.date, x.type === 'دخل' ? 'دخل' : 'مصروف', String(x.item || '').slice(0, 60),
-      x.category || '', +x.amount, String(x.said || '').slice(0, 300), 'جديد', now
-    ]);
-    if (rows.length) {
-      const r0 = sh.getLastRow() + 1;
-      sh.getRange(r0, 1, rows.length, HEAD.length).setNumberFormat('@');
-      sh.getRange(r0, 6, rows.length, 1).setNumberFormat('0.##');
-      sh.getRange(r0, 1, rows.length, HEAD.length).setValues(rows);
-    }
-    return { ok: true, saved: rows.length };
-  } finally { lock.releaseLock(); }
-}
-
-function recent() {
-  const sh = tab();
-  const n = sh.getLastRow() - 1;
-  if (n < 1) return { ok: true, rows: [] };
-  const start = Math.max(2, sh.getLastRow() - 29);
-  const v = sh.getRange(start, 1, sh.getLastRow() - start + 1, HEAD.length).getDisplayValues();
-  return { ok: true, rows: v.reverse().map(r => ({ date: r[1], type: r[2], item: r[3], category: r[4], amount: +r[5], status: r[7] })) };
-}
-
-/** شغّلها مرة من المحرر عشان توافق على الصلاحيات وتتأكد إن المفتاح شغال */
+/** شغّلها مرة من المحرر: بتطلب الصلاحيات وبتجرب المفتاح */
 function test() {
   const p = PropertiesService.getScriptProperties();
+  Logger.log('عدد البنود في قاعدة البيانات: ' + list().length);
   Logger.log(JSON.stringify(parse({ text: 'جبت عيش بعشرة واديت المدام الفين' }, p.getProperty('GEMINI_KEY'))));
-  tab();
 }
