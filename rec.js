@@ -1,14 +1,9 @@
 /* تسجيل الصوت WAV (١٦ كيلوهرتز) عشان Gemini يسمعه */
 window.mRec = (function () {
-  let ac = null, src = null, proc = null, stream = null, chunks = [], rate = 48000, on = false, relT = null;
-  const live = () => stream && stream.getTracks().some(t => t.readyState === "live");
-  function release() { try { stream && stream.getTracks().forEach(t => t.stop()); } catch (e) {} stream = null; try { ac && ac.close(); } catch (e) {} ac = null; }
+  let ac = null, src = null, proc = null, stream = null, chunks = [], rate = 48000, on = false;
   async function start() {
-    clearTimeout(relT);
-    // بنفضل ماسكين الميكروفون طول ما التطبيق مفتوح، عشان الإذن ميتطلبش كل مرة
-    if (!live()) { release(); stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } }); }
-    if (!ac || ac.state === "closed") ac = new (window.AudioContext || window.webkitAudioContext)();
-    await ac.resume(); rate = ac.sampleRate;
+    stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
+    ac = new (window.AudioContext || window.webkitAudioContext)(); await ac.resume(); rate = ac.sampleRate;
     src = ac.createMediaStreamSource(stream); proc = ac.createScriptProcessor(4096, 1, 1); chunks = [];
     proc.onaudioprocess = e => chunks.push(new Float32Array(e.inputBuffer.getChannelData(0)));
     src.connect(proc); proc.connect(ac.destination); on = true;
@@ -16,8 +11,7 @@ window.mRec = (function () {
   function stop() {
     on = false;
     try { proc.disconnect(); src.disconnect(); } catch (e) {}
-    try { ac.suspend(); } catch (e) {}
-    clearTimeout(relT); relT = setTimeout(release, 10 * 60 * 1000);
+    try { stream.getTracks().forEach(t => t.stop()); ac.close(); } catch (e) {}
     const len = chunks.reduce((s, c) => s + c.length, 0), all = new Float32Array(len); let o = 0;
     chunks.forEach(c => { all.set(c, o); o += c.length; });
     let ss = 0; for (let i = 0; i < len; i += 16) ss += all[i] * all[i];
@@ -38,6 +32,5 @@ window.mRec = (function () {
     for (let i = 0; i < u8.length; i += 8192) bin += String.fromCharCode.apply(null, u8.subarray(i, i + 8192));
     return { b64: btoa(bin), secs: n / 16000, rms };
   }
-  document.addEventListener("visibilitychange", () => { if (document.hidden && !on) { clearTimeout(relT); relT = setTimeout(release, 60 * 1000); } });
   return { start, stop, get on() { return on; } };
 })();
