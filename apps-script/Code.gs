@@ -28,6 +28,8 @@ function doPost(e) {
       case 'list': return out({ ok: true, docs: list() });
       case 'put': return out(put(req.docs || []));
       case 'del': return out(del(req.ids || []));
+      case 'gen': return out(gen(req.prompt || '', props.getProperty('GEMINI_KEY')));
+      case 'sheets': return out(sheets(req.tool, req.args || {}));
       default: return out({ ok: false, error: 'action' });
     }
   } catch (err) {
@@ -139,6 +141,43 @@ function parse(req, key) {
     return { ok: true, transcript: o.transcript || '', items: items };
   }
   return { ok: false, error: 'gemini ' + last };
+}
+
+/* نص حر لـ Gemini يرجع JSON (بيستخدمه التطبيق لما تكتب بإيدك) */
+function gen(text, key) {
+  if (!key) return { ok: false, error: 'nokey' };
+  const body = { contents: [{ role: 'user', parts: [{ text: text }] }], generationConfig: { responseMimeType: 'application/json', temperature: 0.1 } };
+  let last = '';
+  for (const m of MODELS) {
+    const r = UrlFetchApp.fetch('https://generativelanguage.googleapis.com/v1beta/models/' + m + ':generateContent', {
+      method: 'post', contentType: 'application/json', payload: JSON.stringify(body),
+      headers: { 'x-goog-api-key': key }, muteHttpExceptions: true
+    });
+    if (r.getResponseCode() !== 200) { last = r.getResponseCode(); continue; }
+    const p = ((((JSON.parse(r.getContentText()).candidates || [])[0] || {}).content || {}).parts || []);
+    return { ok: true, json: JSON.parse(p.map(x => x.text || '').join('').replace(/^```json|```$/g, '').trim()) };
+  }
+  return { ok: false, error: 'gemini ' + last };
+}
+
+/* تحديث تابات الشيت (الحركات وشيت كل شهر) بنفس طريقة الدفتر */
+function sheets(tool, a) {
+  const base = 'https://sheets.googleapis.com/v4/spreadsheets/' + SHEET_ID;
+  const opt = { headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() }, muteHttpExceptions: true };
+  let url;
+  if (tool === 'update_values') {
+    url = base + '/values/' + encodeURIComponent(a.range) + '?valueInputOption=USER_ENTERED';
+    opt.method = 'put'; opt.contentType = 'application/json'; opt.payload = JSON.stringify({ values: a.values });
+  } else if (tool === 'update_spreadsheet') {
+    url = base + ':batchUpdate'; opt.method = 'post'; opt.contentType = 'application/json'; opt.payload = JSON.stringify({ requests: a.requests });
+  } else if (tool === 'get_spreadsheet') {
+    url = base + '?fields=' + encodeURIComponent((a.fields || []).join(',')); opt.method = 'get';
+  } else if (tool === 'get_values') {
+    url = base + '/values/' + encodeURIComponent(a.range); opt.method = 'get';
+  } else return { ok: false, error: 'tool' };
+  const r = UrlFetchApp.fetch(url, opt);
+  if (r.getResponseCode() !== 200) return { ok: false, error: r.getResponseCode() + ' ' + r.getContentText().slice(0, 300) };
+  return { ok: true, payload: JSON.parse(r.getContentText()) };
 }
 
 /** شغّلها مرة من المحرر: بتطلب الصلاحيات وبتجرب المفتاح */
