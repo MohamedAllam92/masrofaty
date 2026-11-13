@@ -20,13 +20,20 @@ const INC = ["مرتب", "دخل إضافي"];
 function doPost(e) {
   try {
     const req = JSON.parse(e.postData.contents);
+    console.log('action=' + req.action + ' keys=' + Object.keys(req).join(',') + ' docsType=' + typeof req.docs);
     const props = PropertiesService.getScriptProperties();
     if (!req.pin || String(req.pin) !== String(props.getProperty('PIN'))) return out({ ok: false, error: 'pin' });
     switch (req.action) {
       case 'ping': return out({ ok: true });
       case 'parse': return out(parse(req, props.getProperty('GEMINI_KEY')));
       case 'list': return out({ ok: true, docs: list() });
-      case 'put': return out(put(req.docs || []));
+      case 'put': return out(put(asList(req.docs)));
+      case 'save': {
+        const c = CacheService.getScriptCache().get('t_' + req.token);
+        if (!c) return out({ ok: false, error: 'expired' });
+        const docs = JSON.parse(c); put(docs); CacheService.getScriptCache().remove('t_' + req.token);
+        return out({ ok: true, saved: docs.length, message: 'اتسجل ' + docs.length + ' بند ✓' });
+      }
       case 'del': return out(del(req.ids || []));
       case 'gen': return out(gen(req.prompt || '', props.getProperty('GEMINI_KEY')));
       case 'sheets': return out(sheets(req.tool, req.args || {}));
@@ -35,6 +42,14 @@ function doPost(e) {
   } catch (err) {
     return out({ ok: false, error: String(err && err.message || err) });
   }
+}
+
+/* الاختصار ممكن يبعت القايمة كنص أو كقاموس، فبنقبل الاتنين */
+function asList(x) {
+  if (Array.isArray(x)) return x;
+  if (typeof x === 'string') { try { return asList(JSON.parse(x)); } catch (e) { return x.split(/\n+/).map(l => { try { return JSON.parse(l); } catch (e) { return null; } }).filter(Boolean); } }
+  if (x && typeof x === 'object') return x.id ? [x] : Object.keys(x).map(k => x[k]);
+  return [];
 }
 
 function doGet() { return out({ ok: true, app: 'masrofaty' }); }
@@ -162,7 +177,9 @@ function ready(items, today) {
   const inc = items.filter(x => x.type === 'دخل').reduce((s, x) => s + x.amount, 0);
   const summary = items.length ? items.map(x => (x.type === 'دخل' ? 'دخل: ' : '') + x.item + ' ' + ar(x.amount) + ' ج (' + x.category + ')').join('\n') +
     (total ? '\nإجمالي المصروف ' + ar(total) + ' ج' : '') + (inc ? '\nإجمالي الدخل ' + ar(inc) + ' ج' : '') : 'مسمعتش مبلغ';
-  return { docs: docs, summary: summary, count: items.length };
+  const token = Utilities.getUuid().slice(0, 8);
+  if (docs.length) CacheService.getScriptCache().put('t_' + token, JSON.stringify(docs), 1800);
+  return { docs: docs, summary: summary, count: items.length, token: token };
 }
 
 /* نص حر لـ Gemini يرجع JSON (بيستخدمه التطبيق لما تكتب بإيدك) */
