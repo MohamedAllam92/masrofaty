@@ -116,31 +116,53 @@ ${typed ? 'النص: «' + typed + '»' : 'اسمع التسجيل الصوتي 
 function parse(req, key) {
   if (!key) return { ok: false, error: 'nokey' };
   const today = req.today || Utilities.formatDate(new Date(), 'Africa/Cairo', 'yyyy-MM-dd');
-  const parts = [];
-  if (req.audio) parts.push({ inline_data: { mime_type: req.mime || 'audio/wav', data: req.audio } });
-  parts.push({ text: prompt(today, req.text || '') });
-  const body = { contents: [{ role: 'user', parts: parts }], generationConfig: { responseMimeType: 'application/json', temperature: 0.1 } };
+  const m0 = String(req.mime || 'audio/wav');
+  const mimes = req.audio ? (/m4a|mp4|aac/.test(m0) ? ['audio/mp4', 'audio/aac', 'audio/m4a'] : [m0]) : [''];
   let last = '';
-  for (const m of MODELS) {
-    const r = UrlFetchApp.fetch('https://generativelanguage.googleapis.com/v1beta/models/' + m + ':generateContent', {
-      method: 'post', contentType: 'application/json', payload: JSON.stringify(body),
-      headers: { 'x-goog-api-key': key }, muteHttpExceptions: true
-    });
-    if (r.getResponseCode() !== 200) { if (r.getResponseCode() === 503 || r.getResponseCode() === 429) Utilities.sleep(1500); last += m + ': ' + r.getResponseCode() + ' ' + r.getContentText().slice(0, 200) + ' | '; continue; }
-    const j = JSON.parse(r.getContentText());
-    const p = (((j.candidates || [])[0] || {}).content || {}).parts || [];
-    const o0 = JSON.parse(p.map(x => x.text || '').join('').replace(/^```json|```$/g, '').trim()); const o = Array.isArray(o0) ? { items: o0 } : (o0 || {});
-    const items = (o.items || []).filter(x => x && +x.amount > 0).map(x => {
-      const inc = x.type === 'دخل', L = inc ? INC : CATS;
-      return {
-        type: inc ? 'دخل' : 'مصروف', item: String(x.item || 'مصروف').slice(0, 60), amount: +x.amount,
-        category: L.indexOf(x.category) >= 0 ? x.category : (inc ? 'دخل إضافي' : 'مصروف البيت'),
-        day_offset: Math.max(-7, Math.min(0, parseInt(x.day_offset, 10) || 0))
-      };
-    });
-    return { ok: true, transcript: o.transcript || '', items: items };
+  for (const mime of mimes) {
+    const parts = [];
+    if (req.audio) parts.push({ inline_data: { mime_type: mime, data: String(req.audio).replace(/\s/g, '') } });
+    parts.push({ text: prompt(today, req.text || '') });
+    const body = { contents: [{ role: 'user', parts: parts }], generationConfig: { responseMimeType: 'application/json', temperature: 0.1 } };
+    for (const m of MODELS) {
+      const r = UrlFetchApp.fetch('https://generativelanguage.googleapis.com/v1beta/models/' + m + ':generateContent', {
+        method: 'post', contentType: 'application/json', payload: JSON.stringify(body),
+        headers: { 'x-goog-api-key': key }, muteHttpExceptions: true
+      });
+      const code = r.getResponseCode();
+      if (code === 400) { last += m + ' ' + mime + ': 400 | '; break; }
+      if (code !== 200) { if (code === 503 || code === 429) Utilities.sleep(1500); last += m + ': ' + code + ' | '; continue; }
+      const j = JSON.parse(r.getContentText());
+      const p = (((j.candidates || [])[0] || {}).content || {}).parts || [];
+      const o0 = JSON.parse(p.map(x => x.text || '').join('').replace(/^```json|```$/g, '').trim());
+      const o = Array.isArray(o0) ? { items: o0 } : (o0 || {});
+      const items = (o.items || []).filter(x => x && +x.amount > 0).map(x => {
+        const inc = x.type === 'دخل', L = inc ? INC : CATS;
+        return {
+          type: inc ? 'دخل' : 'مصروف', item: String(x.item || 'مصروف').slice(0, 60), amount: +x.amount,
+          category: L.indexOf(x.category) >= 0 ? x.category : (inc ? 'دخل إضافي' : 'مصروف البيت'),
+          day_offset: Math.max(-7, Math.min(0, parseInt(x.day_offset, 10) || 0))
+        };
+      });
+      return Object.assign({ ok: true, transcript: o.transcript || '', items: items }, ready(items, today));
+    }
   }
   return { ok: false, error: 'gemini ' + last };
+}
+
+/* بنود جاهزة للحفظ + ملخص مكتوب (بيستخدمهم اختصار الآيفون) */
+function ready(items, today) {
+  const ar = n => String(Math.round(n * 100) / 100).replace(/[0-9]/g, d => '٠١٢٣٤٥٦٧٨٩'[d]);
+  const [y, mo, d] = today.split('-').map(Number), now = Date.now();
+  const docs = items.map((x, i) => ({
+    id: Utilities.getUuid().replace(/-/g, '').slice(0, 20), type: x.type, item: x.item, category: x.category, amount: x.amount,
+    date: Utilities.formatDate(new Date(y, mo - 1, d + x.day_offset, 12), 'Africa/Cairo', 'yyyy-MM-dd'), ts: now + i
+  }));
+  const total = items.filter(x => x.type !== 'دخل').reduce((s, x) => s + x.amount, 0);
+  const inc = items.filter(x => x.type === 'دخل').reduce((s, x) => s + x.amount, 0);
+  const summary = items.length ? items.map(x => (x.type === 'دخل' ? 'دخل: ' : '') + x.item + ' ' + ar(x.amount) + ' ج (' + x.category + ')').join('\n') +
+    (total ? '\nإجمالي المصروف ' + ar(total) + ' ج' : '') + (inc ? '\nإجمالي الدخل ' + ar(inc) + ' ج' : '') : 'مسمعتش مبلغ';
+  return { docs: docs, summary: summary, count: items.length };
 }
 
 /* نص حر لـ Gemini يرجع JSON (بيستخدمه التطبيق لما تكتب بإيدك) */
