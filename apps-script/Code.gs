@@ -12,7 +12,7 @@
 const SHEET_ID = '1XEaQft4984YhrdqVxFiSk-IMCsCAqJ_uOx2ZG6Z73bw';
 const DB = 'قاعدة البيانات';
 const COLS = ['id', 'type', 'date', 'item', 'category', 'amount', 'ts', 'status', 'note', 'deleted', 'updated'];
-const MODELS = ['gemini-3.5-flash', 'gemini-3.5-flash-lite', 'gemini-3.1-flash-lite', 'gemini-flash-lite-latest'];
+const MODELS = ['gemini-3.5-flash-lite', 'gemini-3.1-flash-lite', 'gemini-flash-lite-latest'];
 
 const CATS = ["مصروف البيت","بقالة وسوبرماركت","خضار وفاكهة","لحوم وفراخ وسمك","عيش وفطار","أكل برا وديليفري","قهوة وشاي ومشروبات","حلويات وتسالي","مواصلات","عربية وبنزين","إيجار وأقساط سكن","كهربا وميه وغاز","تليفون ونت","صيانة وتصليحات","أدوات منزلية ومنظفات","أولاد ومدارس","دروس وتعليم","دكاترة وتحاليل","أدوية وصيدلية","حلاقة وعناية شخصية","لبس وجزم","خروجات وترفيه","سفر ومصايف","هدايا ومناسبات","صدقات وزكاة","جمعيات وأقساط","اشتراكات ونادي","سجاير","شغل ومصاريف مهنية"];
 const INC = ["مرتب", "دخل إضافي"];
@@ -129,7 +129,7 @@ function parse(req, key) {
     if (r.getResponseCode() !== 200) { if (r.getResponseCode() === 503 || r.getResponseCode() === 429) Utilities.sleep(1500); last += m + ': ' + r.getResponseCode() + ' ' + r.getContentText().slice(0, 200) + ' | '; continue; }
     const j = JSON.parse(r.getContentText());
     const p = (((j.candidates || [])[0] || {}).content || {}).parts || [];
-    const o = JSON.parse(p.map(x => x.text || '').join('').replace(/^```json|```$/g, '').trim());
+    const o0 = JSON.parse(p.map(x => x.text || '').join('').replace(/^```json|```$/g, '').trim()); const o = Array.isArray(o0) ? { items: o0 } : (o0 || {});
     const items = (o.items || []).filter(x => x && +x.amount > 0).map(x => {
       const inc = x.type === 'دخل', L = inc ? INC : CATS;
       return {

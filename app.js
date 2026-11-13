@@ -239,30 +239,59 @@ $("go").onclick=async()=>{
   draft=res; setSt(""); showPreview();
 };
 
-/* ---------- المايك: الصوت بيروح لـ Gemini يكتبه ويطلّع البنود ---------- */
+/* ---------- المايك: الكلام بيتكتب وانت بتتكلم، وبعدها Gemini يسمع التسجيل ويطلّع البنود ---------- */
 (function(){
   const b=$("mic"), ta=$("say");
+  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  let sr=null, live="", base="";
   const idle=()=>{b.classList.remove("rec","busy");b.textContent="🎤 اتكلم";b.disabled=false};
+  function startLive(){
+    live=""; if(!SR) return;
+    try{
+      sr=new SR(); sr.lang="ar-EG"; sr.continuous=true; sr.interimResults=true;
+      sr.onresult=e=>{let t="";for(let i=0;i<e.results.length;i++) t+=e.results[i][0].transcript+(e.results[i].isFinal?" ":"");
+        live=t.trim(); ta.value=(base?base+" ":"")+live;};
+      sr.onerror=()=>{}; sr.onend=()=>{if(mRec.on){try{sr.start()}catch(e){}}};
+      sr.start();
+    }catch(e){sr=null}
+  }
+  function stopLive(){try{if(sr){const s=sr;sr=null;s.onend=null;s.stop()}}catch(e){}}
+  async function fromText(text){
+    let res=null; try{res=await aiParse(text)}catch(e){}
+    if(!res||!res.length) res=localParse(text).map(x=>({...x,day_offset:/امبارح|إمبارح/.test(text)?-1:0}));
+    return res;
+  }
+  function show(its){
+    if(its.length){draft=draft.concat(its);setSt("");showPreview()}
+    else setSt("مسمعتش مبلغ. قول الحاجة ومعاها سعرها",true);
+  }
   b.onclick=async()=>{
     if(b.classList.contains("busy")) return;
     if(!mRec.on){
-      clearTimeout(autoT);
-      try{await mRec.start();b.classList.add("rec");b.textContent="⏹ وقّف";setSt("بسمعك… اتكلم عادي ودوس وقّف لما تخلص")}
-      catch(e){setSt("لازم توافق على الميكروفون من إعدادات الموبايل",true)}
+      clearTimeout(autoT); base=ta.value.trim();
+      try{await mRec.start()}catch(e){setSt("لازم توافق على الميكروفون من إعدادات الموبايل",true);return}
+      startLive();
+      b.classList.add("rec");b.textContent="⏹ وقّف";setSt("بسمعك… اتكلم عادي ودوس وقّف لما تخلص");
       return;
     }
+    stopLive();
     b.classList.remove("rec");b.classList.add("busy");b.textContent="⏳ بفهم…";b.disabled=true;
-    const {b64,secs}=mRec.stop();
-    if(secs<0.6){idle();setSt("التسجيل قصير، جرّب تاني",true);return}
+    const {b64,secs,rms}=mRec.stop();
+    parseSeq++; lastParsed=ta.value.trim();
+    if(secs<0.6&&!live){idle();setSt("التسجيل قصير، جرّب تاني",true);return}
     setSt("بفهم الكلام…");
     try{
-      const r=await window.mApi({action:"parse",audio:b64,mime:"audio/wav",today:todayIso()});
-      const said=(r.transcript||"").trim();
-      ta.value=(ta.value.trim()?ta.value.trim()+" ":"")+said; lastParsed=ta.value.trim(); parseSeq++;
-      const its=(r.items||[]).map(x=>({type:x.type,item:x.item,amount:+x.amount,category:x.category,day_offset:x.day_offset||0}));
-      if(its.length){draft=draft.concat(its);setSt("");showPreview()}
-      else setSt("مسمعتش مبلغ. قول الحاجة ومعاها سعرها",true);
-    }catch(e){setSt(e&&e.code==="pin"?"الرقم السري اتغير":"محصلش فهم، جرّب تاني أو اكتب بإيدك",true)}
+      if(rms<0.002&&live){ show(await fromText(live)); }
+      else{
+        const r=await window.mApi({action:"parse",audio:b64,mime:"audio/wav",today:todayIso()},30000);
+        const said=(r.transcript||"").trim();
+        if(said){ta.value=(base?base+" ":"")+said; lastParsed=ta.value.trim()}
+        show((r.items||[]).map(x=>({type:x.type,item:x.item,amount:+x.amount,category:x.category,day_offset:x.day_offset||0})));
+      }
+    }catch(e){
+      if(live){ setSt("بفهم من الكلام المكتوب…"); try{show(await fromText(live))}catch(_){setSt("محصلش فهم، جرّب تاني",true)} }
+      else setSt(e&&e.code==="pin"?"الرقم السري اتغير":e&&e.code==="timeout"?"النت بطيء، جرّب تاني":"محصلش فهم، جرّب تاني أو اكتب بإيدك",true);
+    }
     idle();
   };
 })();

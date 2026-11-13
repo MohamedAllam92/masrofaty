@@ -14,6 +14,8 @@ window.mRec = (function () {
     try { stream.getTracks().forEach(t => t.stop()); ac.close(); } catch (e) {}
     const len = chunks.reduce((s, c) => s + c.length, 0), all = new Float32Array(len); let o = 0;
     chunks.forEach(c => { all.set(c, o); o += c.length; });
+    let ss = 0; for (let i = 0; i < len; i += 16) ss += all[i] * all[i];
+    const rms = Math.sqrt(ss / Math.max(1, len / 16));
     const ratio = rate / 16000, n = Math.floor(len / ratio), pcm = new Int16Array(n);
     for (let i = 0; i < n; i++) {
       const a = Math.floor(i * ratio), b = Math.min(len, Math.floor((i + 1) * ratio)); let s = 0;
@@ -28,7 +30,7 @@ window.mRec = (function () {
     new Int16Array(buf, 44).set(pcm);
     let bin = ""; const u8 = new Uint8Array(buf);
     for (let i = 0; i < u8.length; i += 8192) bin += String.fromCharCode.apply(null, u8.subarray(i, i + 8192));
-    return { b64: btoa(bin), secs: n / 16000 };
+    return { b64: btoa(bin), secs: n / 16000, rms };
   }
   return { start, stop, get on() { return on; } };
 })();

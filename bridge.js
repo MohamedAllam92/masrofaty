@@ -6,8 +6,12 @@
   try { cfg = JSON.parse(localStorage.getItem("cfg") || "{}") || {}; } catch (e) {}
   if (!cfg.url) cfg.url = DEF_URL;
 
-  async function api(body) {
-    const r = await fetch(cfg.url, { method: "POST", body: JSON.stringify({ ...body, pin: cfg.pin }) });
+  async function api(body, ms) {
+    const ctl = new AbortController(), tm = setTimeout(() => ctl.abort(), ms || 60000);
+    let r;
+    try { r = await fetch(cfg.url, { method: "POST", body: JSON.stringify({ ...body, pin: cfg.pin }), signal: ctl.signal }); }
+    catch (e) { const er = new Error("timeout"); er.code = ctl.signal.aborted ? "timeout" : "net"; throw er; }
+    finally { clearTimeout(tm); }
     const j = await r.json();
     if (!j.ok) { const e = new Error(j.error || "error"); e.code = j.error; throw e; }
     return j;
@@ -106,7 +110,7 @@
   window.mRefresh = refresh;
 
   /* ---------- باقي الأدوات ---------- */
-  const sample = { json: async (prompt) => (await api({ action: "gen", prompt })).json };
+  const sample = { json: async (prompt) => { const j = (await api({ action: "gen", prompt }, 25000)).json; return Array.isArray(j) ? { items: j } : j; } };
   const mcp = { callTool: async (server, tool, args) => ({ payload: (await api({ action: "sheets", tool, args })).payload }) };
   const downloads = {
     save: async ({ filename, data }) => {
