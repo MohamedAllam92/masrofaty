@@ -13,7 +13,9 @@ const SHEET_ID = '1XEaQft4984YhrdqVxFiSk-IMCsCAqJ_uOx2ZG6Z73bw';
 const DB = 'قاعدة البيانات';
 const COLS = ['id', 'type', 'date', 'item', 'category', 'amount', 'ts', 'status', 'note', 'deleted', 'updated'];
 /* للصوت: Flash الكامل بيفهم العامية المصري أحسن بكتير من Lite، والـ Lite احتياطي */
-const MODELS = ['gemini-flash-latest', 'gemini-3.5-flash', 'gemini-3.5-flash-lite', 'gemini-flash-lite-latest'];
+const ALL_MODELS = ['gemini-flash-latest', 'gemini-3.5-flash', 'gemini-3.5-flash-lite', 'gemini-flash-lite-latest', 'gemini-2.5-flash'];
+/* الترتيب الأسرع بيتحفظ لما تشغّل test() */
+const MODELS = (PropertiesService.getScriptProperties().getProperty('MODEL_ORDER') || ALL_MODELS.join(',')).split(',');
 
 const CATS = ["مصروف البيت","بقالة وسوبرماركت","خضار وفاكهة","لحوم وفراخ وسمك","عيش وفطار","أكل برا وديليفري","قهوة وشاي ومشروبات","حلويات وتسالي","مواصلات","عربية وبنزين","إيجار وأقساط سكن","كهربا وميه وغاز","تليفون ونت","صيانة وتصليحات","أدوات منزلية ومنظفات","أولاد ومدارس","دروس وتعليم","دكاترة وتحاليل","أدوية وصيدلية","حلاقة وعناية شخصية","لبس وجزم","خروجات وترفيه","سفر ومصايف","هدايا ومناسبات","صدقات وزكاة","جمعيات وأقساط","اشتراكات ونادي","سجاير","شغل ومصاريف مهنية"];
 const INC = ["مرتب", "دخل إضافي"];
@@ -127,6 +129,7 @@ function callGemini(m, body, key) {
     r = go(fast);
   }
   if (r.getResponseCode() === 400) r = go(body);
+  console.log(m + ' -> ' + r.getResponseCode());
   return r;
 }
 
@@ -231,11 +234,31 @@ function sheets(tool, a) {
   return { ok: true, payload: JSON.parse(r.getContentText()) };
 }
 
-/** شغّلها مرة من المحرر: بتطلب الصلاحيات وبتجرب المفتاح */
+/** شغّلها من المحرر: بتجرب كل موديل وبتحفظ الأسرع اللي فاهم صح */
 function test() {
-  const p = PropertiesService.getScriptProperties();
+  const p = PropertiesService.getScriptProperties(), key = p.getProperty('GEMINI_KEY');
   Logger.log('عدد البنود في قاعدة البيانات: ' + list().length);
-  const t0 = Date.now();
-  Logger.log(JSON.stringify(parse({ text: 'جبت عيش بعشرة واديت المدام الفين' }, p.getProperty('GEMINI_KEY'))));
-  Logger.log('الوقت: ' + Math.round((Date.now() - t0) / 1000) + ' ثانية');
+  const body = { contents: [{ role: 'user', parts: [{ text: prompt('2026-11-15', 'جبت عيش بعشرة واديت المدام الفين') }] }], generationConfig: { responseMimeType: 'application/json', temperature: 0.1 } };
+  const res = [];
+  ALL_MODELS.forEach(m => {
+    const t0 = Date.now(); let code = 0, good = false;
+    try {
+      const r = callGemini(m, body, key); code = r.getResponseCode();
+      if (code === 200) {
+        const parts = ((((JSON.parse(r.getContentText()).candidates || [])[0] || {}).content || {}).parts || []);
+        const o = JSON.parse(parts.map(x => x.text || '').join('').replace(/^```json|```$/g, '').trim());
+        const its = (o.items || o || []);
+        good = its.length === 2 && its.some(x => +x.amount === 10) && its.some(x => +x.amount === 2000);
+      }
+    } catch (e) { code = 'خطأ'; }
+    const sec = (Date.now() - t0) / 1000;
+    res.push({ m: m, sec: sec, ok: good });
+    Logger.log(m + ' | رد ' + code + ' | ' + sec.toFixed(1) + ' ثانية | ' + (good ? 'فهم صح' : 'مش شغال'));
+  });
+  const ok = res.filter(x => x.ok);
+  if (!ok.length) { Logger.log('ولا موديل اشتغل، ابعت الصورة دي لـ Claude'); return; }
+  const fast = ok.filter(x => x.sec <= 8), slow = ok.filter(x => x.sec > 8).sort((a, b) => a.sec - b.sec);
+  const order = fast.concat(slow).map(x => x.m);
+  p.setProperty('MODEL_ORDER', order.join(','));
+  Logger.log('اتحفظ الترتيب: ' + order.join(' ثم '));
 }
