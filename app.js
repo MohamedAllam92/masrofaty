@@ -295,7 +295,7 @@ $("go").onclick=async()=>{
       }
     }catch(e){
       if(live){ setSt("بفهم من الكلام المكتوب…"); try{show(await fromText(live))}catch(_){setSt("محصلش فهم، جرّب تاني",true)} }
-      else setSt(e&&e.code==="pin"?"الرقم السري اتغير":e&&e.code==="timeout"?"النت بطيء، جرّب تاني":"محصلش فهم، جرّب تاني أو اكتب بإيدك",true);
+      else setSt(e&&e.code==="pin"?"الرقم السري اتغير":e&&e.code==="timeout"?"النت بطيء، جرّب تاني":"محصلش فهم ("+String(e&&e.message||e).slice(0,140)+")",true);
     }
     idle();
   };
