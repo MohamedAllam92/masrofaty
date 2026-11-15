@@ -275,7 +275,7 @@ $("go").onclick=async()=>{
     if(!mRec.on){
       clearTimeout(autoT); base=ta.value.trim();
       try{await mRec.start()}catch(e){setSt("لازم توافق على الميكروفون من إعدادات الموبايل",true);return}
-      startLive();
+      /* مفيش تفريغ الآيفون مع التسجيل: كان بياخد الميكروفون والتسجيل يطلع فاضي */
       b.classList.add("rec");b.textContent="⏹ وقّف";setSt("بسمعك… اتكلم عادي ودوس وقّف لما تخلص");
       return;
     }
@@ -283,12 +283,12 @@ $("go").onclick=async()=>{
     b.classList.remove("rec");b.classList.add("busy");b.textContent="⏳ بفهم…";b.disabled=true;
     const {b64,secs,rms}=mRec.stop();
     parseSeq++; lastParsed=ta.value.trim();
-    if(secs<0.6&&!live){idle();setSt("التسجيل قصير، جرّب تاني",true);return}
+    if(secs<0.6){idle();setSt("التسجيل قصير، جرّب تاني",true);return}
     setSt("بفهم الكلام…");
     try{
-      if(rms<0.002&&live){ show(await fromText(live)); }
-      else{
-        const r=await window.mApi({action:"parse",audio:b64,mime:"audio/wav",today:todayIso()},30000);
+      if(rms<0.0008){ idle(); setSt("الميكروفون مجابش صوت، قرّب الموبايل واتكلم تاني",true); return; }
+      {
+        const r=await window.mApi({action:"parse",audio:b64,mime:"audio/wav",today:todayIso()},45000);
         const said=(r.transcript||"").trim();
         if(said){ta.value=(base?base+" ":"")+said; lastParsed=ta.value.trim()}
         show((r.items||[]).map(x=>({type:x.type,item:x.item,amount:+x.amount,category:x.category,day_offset:x.day_offset||0})));

@@ -2,7 +2,7 @@
 window.mRec = (function () {
   let ac = null, src = null, proc = null, stream = null, chunks = [], rate = 48000, on = false;
   async function start() {
-    stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
+    stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
     ac = new (window.AudioContext || window.webkitAudioContext)(); await ac.resume(); rate = ac.sampleRate;
     src = ac.createMediaStreamSource(stream); proc = ac.createScriptProcessor(4096, 1, 1); chunks = [];
     proc.onaudioprocess = e => chunks.push(new Float32Array(e.inputBuffer.getChannelData(0)));
@@ -16,6 +16,9 @@ window.mRec = (function () {
     chunks.forEach(c => { all.set(c, o); o += c.length; });
     let ss = 0; for (let i = 0; i < len; i += 16) ss += all[i] * all[i];
     const rms = Math.sqrt(ss / Math.max(1, len / 16));
+    /* تعلية الصوت لو واطي عشان Gemini يسمعه كويس */
+    let pk = 0; for (let i = 0; i < len; i++) { const a = Math.abs(all[i]); if (a > pk) pk = a; }
+    if (pk > 0.003 && pk < 0.9) { const g = Math.min(30, 0.9 / pk); for (let i = 0; i < len; i++) all[i] *= g; }
     const ratio = rate / 16000, n = Math.floor(len / ratio), pcm = new Int16Array(n);
     for (let i = 0; i < n; i++) {
       const a = Math.floor(i * ratio), b = Math.min(len, Math.floor((i + 1) * ratio)); let s = 0;
