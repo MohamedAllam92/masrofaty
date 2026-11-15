@@ -110,7 +110,7 @@
   window.mRefresh = refresh;
 
   /* ---------- باقي الأدوات ---------- */
-  const sample = { json: async (prompt) => { const j = (await api({ action: "gen", prompt }, 25000)).json; return Array.isArray(j) ? { items: j } : j; } };
+  const sample = { json: async (prompt) => { const j = (await api({ action: "gen", prompt }, 45000)).json; return Array.isArray(j) ? { items: j } : j; } };
   const mcp = { callTool: async (server, tool, args) => ({ payload: (await api({ action: "sheets", tool, args })).payload }) };
   const downloads = {
     save: async ({ filename, data }) => {

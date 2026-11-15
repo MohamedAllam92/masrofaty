@@ -113,6 +113,23 @@ function del(ids) {
 }
 
 /* ---------------- فهم الكلام بـ Gemini ---------------- */
+/* نداء Gemini بأقل تفكير عشان يرد بسرعة؛ لو الموديل مش بيقبل الإعداد ده يتنادى من غيره */
+function callGemini(m, body, key) {
+  const go = b => UrlFetchApp.fetch('https://generativelanguage.googleapis.com/v1beta/models/' + m + ':generateContent', {
+    method: 'post', contentType: 'application/json', payload: JSON.stringify(b),
+    headers: { 'x-goog-api-key': key }, muteHttpExceptions: true
+  });
+  const fast = JSON.parse(JSON.stringify(body));
+  fast.generationConfig.thinkingConfig = { thinkingLevel: 'minimal' };
+  let r = go(fast);
+  if (r.getResponseCode() === 400) {
+    fast.generationConfig.thinkingConfig = { thinkingBudget: 0 };
+    r = go(fast);
+  }
+  if (r.getResponseCode() === 400) r = go(body);
+  return r;
+}
+
 function prompt(today, typed) {
   return `${typed ? '' : 'التسجيل باللهجة المصرية العامية (مش فصحى ومش لهجة تانية). اسمعه كله بتركيز لآخره حتى لو الصوت واطي أو فيه دوشة، ومتألفش كلام مش موجود. لو مش متأكد من كلمة اكتب أقرب كلمة مصري منطقية في سياق المصاريف (عيش، فول، طعمية، توكتوك، المدام، حمزة، عمر، الدرس، الحضانة، الكهربا، كارت شحن…).\n'}انت بتسمع (أو بتقرا) كلام مصري عامي من شخص بيسجل مصروفاته ودخله بالجنيه المصري. النهارده ${today}.
 ${typed ? 'النص: «' + typed + '»' : 'اسمع التسجيل الصوتي المرفق.'}
@@ -141,13 +158,10 @@ function parse(req, key) {
     parts.push({ text: prompt(today, req.text || '') });
     const body = { contents: [{ role: 'user', parts: parts }], generationConfig: { responseMimeType: 'application/json', temperature: 0.1 } };
     for (const m of MODELS) {
-      const r = UrlFetchApp.fetch('https://generativelanguage.googleapis.com/v1beta/models/' + m + ':generateContent', {
-        method: 'post', contentType: 'application/json', payload: JSON.stringify(body),
-        headers: { 'x-goog-api-key': key }, muteHttpExceptions: true
-      });
+      const r = callGemini(m, body, key);
       const code = r.getResponseCode();
       if (code === 400 || code === 404) { last += m + ' ' + mime + ': ' + code + ' | '; continue; }
-      if (code !== 200) { if (code === 503 || code === 429) Utilities.sleep(1500); last += m + ': ' + code + ' | '; continue; }
+      if (code !== 200) { if (code === 503 || code === 429) Utilities.sleep(500); last += m + ': ' + code + ' | '; continue; }
       const j = JSON.parse(r.getContentText());
       const p = (((j.candidates || [])[0] || {}).content || {}).parts || [];
       const o0 = JSON.parse(p.map(x => x.text || '').join('').replace(/^```json|```$/g, '').trim());
@@ -189,11 +203,8 @@ function gen(text, key) {
   const body = { contents: [{ role: 'user', parts: [{ text: text }] }], generationConfig: { responseMimeType: 'application/json', temperature: 0.1 } };
   let last = '';
   for (const m of MODELS) {
-    const r = UrlFetchApp.fetch('https://generativelanguage.googleapis.com/v1beta/models/' + m + ':generateContent', {
-      method: 'post', contentType: 'application/json', payload: JSON.stringify(body),
-      headers: { 'x-goog-api-key': key }, muteHttpExceptions: true
-    });
-    if (r.getResponseCode() !== 200) { if (r.getResponseCode() === 503 || r.getResponseCode() === 429) Utilities.sleep(1500); last = r.getResponseCode(); continue; }
+    const r = callGemini(m, body, key);
+    if (r.getResponseCode() !== 200) { if (r.getResponseCode() === 503 || r.getResponseCode() === 429) Utilities.sleep(500); last = r.getResponseCode(); continue; }
     const p = ((((JSON.parse(r.getContentText()).candidates || [])[0] || {}).content || {}).parts || []);
     return { ok: true, json: JSON.parse(p.map(x => x.text || '').join('').replace(/^```json|```$/g, '').trim()) };
   }
@@ -224,5 +235,7 @@ function sheets(tool, a) {
 function test() {
   const p = PropertiesService.getScriptProperties();
   Logger.log('عدد البنود في قاعدة البيانات: ' + list().length);
+  const t0 = Date.now();
   Logger.log(JSON.stringify(parse({ text: 'جبت عيش بعشرة واديت المدام الفين' }, p.getProperty('GEMINI_KEY'))));
+  Logger.log('الوقت: ' + Math.round((Date.now() - t0) / 1000) + ' ثانية');
 }
