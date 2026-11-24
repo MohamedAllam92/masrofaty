@@ -765,6 +765,8 @@ $("xl").onclick=async()=>{
     const e=Object.entries(by).sort((a,b)=>b[1]-a[1]),mx=e.length?e[0][1]:0;
     if(!e.length) return '<div class="empty">مفيش مصروف</div>';
     return '<div class="cats">'+e.map(([c,v])=>'<div class="cat"><span>'+esc(c)+'</span><div class="bar"><i style="width:'+(mx?v/mx*100:0)+'%"></i></div><span class="v">'+fmt(v)+'</span></div>').join("")+'</div>'}
+  function whoCard(list){if(!list.length)return "";const bw={};WHO.forEach(w=>bw[w]=0);list.forEach(i=>bw[whoOf(i)]+=(+i.amount||0));
+    return '<section class="card"><h2>حسب لمين</h2>'+WHO.map(w=>'<div class="kv"><span>'+WHO_L[w]+'</span><b>'+fmt(bw[w])+' ج</b></div>').join("")+'</section>'}
   function nav(id,title,sub){return '<nav class="mnav"><button type="button" id="'+id+'P" aria-label="اللي قبله">›</button><div class="mt"><b>'+title+'</b><small>'+sub+'</small></div><button type="button" id="'+id+'N" aria-label="اللي بعده">‹</button></nav>'}
   function draw(){
     if(!view) return; const t=todayIso();
@@ -774,7 +776,7 @@ $("xl").onclick=async()=>{
       const lbl=dSel===t?"النهارده":dSel===addD(t,-1)?"امبارح":wdName(dSel);
       const dRows=a=>a.slice().sort((x,y)=>(x.ts||0)-(y.ts||0)).map(i=>'<div class="res'+(isInc(i)?" in":"")+'"><span>'+esc(i.item)+'</span><span class="a">'+(isInc(i)?"+ ":"")+fmt(+i.amount||0)+' ج</span><span class="c">'+esc(i.category||(isInc(i)?"دخل":"مصروف البيت"))+'</span></div>').join("");
       const dSec=(title,a)=>'<section class="card"><div class="sechead"><h2>'+title+'</h2><b>'+fmt(sum(a))+' ج</b></div><div>'+dRows(a)+'</div></section>';
-      pb.innerHTML='<section class="card">'+nav("d",lbl,DD(dSel))+'</section>'+
+      pb.innerHTML='<section class="card">'+nav("d",lbl,DD(dSel))+'</section>'+whoCard(e)+
         (all.length?(e.length?dSec("المصروفات",e):'')+(inL.length?dSec("الدخل",inL):''):'<div class="empty">مفيش مصروف ولا دخل في اليوم ده</div>');
       $("dP").onclick=()=>{dSel=addD(dSel,-1);draw()}; $("dN").onclick=()=>{dSel=addD(dSel,1);draw()};
     }
@@ -798,7 +800,7 @@ $("xl").onclick=async()=>{
           (big?'<div class="kv"><span>أكبر بند</span><b>'+esc(big.item)+' · '+fmt(+big.amount||0)+'</b></div>':'')+
         '</section>'+
         '<section class="card"><h2>يوم بيوم</h2><div>'+days.map(([d,v])=>'<div class="wd'+(d===t?" today":"")+'" data-d="'+d+'" role="button" tabindex="0"><span>'+wdName(d)+'</span><div class="bar"><i style="width:'+(mx?v/mx*100:0)+'%"></i></div><span class="v">'+fmt(v)+'</span></div>').join("")+'</div><p class="pnote">دوس على أي يوم تشوف حركاته</p></section>'+
-        '<section class="card"><h2>حسب البند</h2>'+catBars(e)+'</section>';
+        whoCard(e)+'<section class="card"><h2>حسب البند</h2>'+catBars(e)+'</section>';
       $("wP").onclick=()=>{wSel=addD(wSel,-7);draw()}; $("wN").onclick=()=>{wSel=addD(wSel,7);draw()};
       pb.querySelectorAll(".wd").forEach(r=>{const f=()=>{dSel=r.dataset.d;view="day";pn.scrollTop=0;draw()};r.onclick=f;r.onkeydown=ev=>{if(ev.key==="Enter")f()}});
     }
