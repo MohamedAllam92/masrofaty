@@ -195,6 +195,8 @@ async function aiParse(text){
 /* ---------- preview ---------- */
 let draft=[];
 function showPreview(){
+  {const wi=$("whoIn"),v=wi?wi.value:"";draft.forEach(d=>{if(d.type==="دخل"||d.whoMan)return;
+    if(v){d.who=v;d.whoSet=1;d.whoIn=1}else if(d.whoIn){d.who="";d.whoSet=0;d.whoIn=0}})}
   const pv=$("pv"); pv.innerHTML="";
   if(!draft.length){pv.innerHTML='<div class="pvempty">اللي هتقوله هيظهر هنا متحسب لوحده، وتدوس احفظ</div>';return}
   const tip=document.createElement("div"); tip.className="pnote2"; tip.textContent="دوس على أي بند تعدّله"; pv.appendChild(tip);
@@ -214,7 +216,7 @@ function showPreview(){
     const wfill=()=>{w.innerHTML="";w.hidden=d.type==="دخل";if(w.hidden)return;if(!WHO.includes(d.who))d.who=guessWho(d.item,d.category);
       WHO.forEach(n=>{const o=document.createElement("option");o.textContent=n;if(n===d.who)o.selected=true;w.appendChild(o)})};
     fill(); wfill(); c.onchange=()=>{d.category=c.value;if(!d.whoSet){d.who="";wfill()}};
-    w.onchange=()=>{d.who=w.value;d.whoSet=1};
+    w.onchange=()=>{d.who=w.value;d.whoSet=1;d.whoMan=1};
     ty.onchange=()=>{d.type=ty.value; fill(); wfill()};
     const sel=document.createElement("div"); sel.className="pvsel"; sel.append(ty,c,w);
     const sm=document.createElement("button"); sm.type="button"; sm.className="pvs";
@@ -236,11 +238,12 @@ function showPreview(){
     const list=draft.filter(x=>x.amount>0).map(x=>{const [y,m,dd]=base.split("-").map(Number);
       const dt=new Date(y,m-1,dd+(x.day_offset||0));
       return {type:x.type||"مصروف",item:x.item.trim()||"مصروف",amount:x.amount,category:x.category,date:iso(dt),ts:Date.now(),note:(x.type||"مصروف")==="دخل"?"":(WHO.includes(x.who)?x.who:guessWho(x.item,x.category))}});
-    try{await addItems(list); setSt("اتحفظ "+list.length+" بند ✓"); draft=[]; pvDirty=false; lastParsed=""; clearTimeout(autoT); showPreview(); $("say").value="";}
+    try{await addItems(list); setSt("اتحفظ "+list.length+" بند ✓"); draft=[]; pvDirty=false; lastParsed=""; clearTimeout(autoT); showPreview(); $("say").value=""; $("whoIn").value="";}
     catch(e){setSt("محصلش حفظ، جرب تاني",true); ok.disabled=false}
   };
   row.appendChild(ok); pv.appendChild(row);
 }
+$("whoIn").onchange=()=>showPreview();
 function setSt(t,err){const s=$("st"); s.textContent=t; s.className="status"+(err?" err":"")}
 
 let parseSeq=0, lastParsed="", autoT=null, quickT=null, pvDirty=false;
