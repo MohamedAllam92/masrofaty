@@ -18,7 +18,8 @@ const ALL_MODELS = ['gemini-flash-latest', 'gemini-3.5-flash', 'gemini-3.5-flash
 const MODELS = (PropertiesService.getScriptProperties().getProperty('MODEL_ORDER') || ALL_MODELS.join(',')).split(',');
 
 const CATS = ["مصروف البيت","بقالة وسوبرماركت","خضار وفاكهة","لحوم وفراخ وسمك","عيش وفطار","أكل برا وديليفري","قهوة وشاي ومشروبات","حلويات وتسالي","مواصلات","عربية وبنزين","إيجار وأقساط سكن","كهربا وميه وغاز","تليفون ونت","صيانة وتصليحات","أدوات منزلية ومنظفات","أولاد ومدارس","دروس وتعليم","دكاترة وتحاليل","أدوية وصيدلية","حلاقة وعناية شخصية","لبس وجزم","خروجات وترفيه","سفر ومصايف","هدايا ومناسبات","صدقات وزكاة","جمعيات وأقساط","اشتراكات ونادي","سجاير","شغل ومصاريف مهنية"];
-const INC = ["مرتب", "دخل إضافي"];
+const INC = ["مرتب", "مكافأة", "لجنة", "حافز", "دخل إضافي", "رصيد مرحّل"];
+const WHO = ["ليا", "لمراتي", "للبيت", "للعيال", "مرافق"];
 
 function doPost(e) {
   try {
@@ -144,9 +145,10 @@ ${typed ? 'النص: «' + typed + '»' : 'اسمع التسجيل الصوتي 
 تصنيف المصروف لازم يكون واحد من دول بالظبط: ${CATS.join('، ')}.
 أمثلة: مصروف الست/المدام/مراتي = "مصروف البيت"؛ فيوري أو فينو أو شيبسي = "حلويات وتسالي"؛ فيتو (فيتو للولاد) = "أولاد ومدارس" دايماً؛ توكتوك أو مواصلات حمزة أو المدرسة = "أولاد ومدارس" مش "مواصلات"؛ الحلاقة = "حلاقة وعناية شخصية"؛ الكشري = "أكل برا وديليفري".
 ممنوع "تاني" أو "أخرى": اختار أقرب تصنيف.
-تصنيف الدخل: "مرتب" للمرتب، وأي دخل تاني "دخل إضافي" واسم البند نوعه (مكافأة، لجنة، حافز…).
+تصنيف الدخل واحد من دول بالظبط: ${INC.join('، ')} ("رصيد مرحّل" للفلوس اللي فاضلة من الشهر اللي فات، وأي دخل مش من دول "دخل إضافي").
+لكل مصروف حدد "who" (لمين) واحد من دول بالظبط: "ليا" (مصاريفه الشخصية: قهوة، سجاير، فطاره، مواصلاته، حلاقة، لبسه، علاجه)، "لمراتي" (مصروف البيت للمدام أو حاجة جابها لها)، "للبيت" (بقالة، خضار، لحمة، منظفات)، "للعيال" (حمزة وعمر: مدرسة، درس، سباحة، نادي، حضانة، توكتوك المدرسة، دكاترتهم، فينو وفيتو للولاد، بامبرز)، "مرافق" (كهربا، مية، غاز، فواتير التليفون والنت). لو قال لمين صراحة التزم بكلامه.
 "امبارح" = day_offset -1، "أول امبارح" = -2، غير كده 0.
-رد JSON بس: {"transcript":"...","items":[{"type":"مصروف","item":"عيش","amount":10,"category":"عيش وفطار","day_offset":0}]}`;
+رد JSON بس: {"transcript":"...","items":[{"type":"مصروف","item":"عيش","amount":10,"category":"عيش وفطار","who":"للبيت","day_offset":0}]}`;
 }
 
 function parse(req, key) {
@@ -174,6 +176,7 @@ function parse(req, key) {
         return {
           type: inc ? 'دخل' : 'مصروف', item: String(x.item || 'مصروف').slice(0, 60), amount: +x.amount,
           category: L.indexOf(x.category) >= 0 ? x.category : (inc ? 'دخل إضافي' : 'مصروف البيت'),
+          who: !inc && WHO.indexOf(x.who) >= 0 ? x.who : '',
           day_offset: Math.max(-7, Math.min(0, parseInt(x.day_offset, 10) || 0))
         };
       });
@@ -188,12 +191,12 @@ function ready(items, today) {
   const ar = n => String(Math.round(n * 100) / 100).replace(/[0-9]/g, d => '٠١٢٣٤٥٦٧٨٩'[d]);
   const [y, mo, d] = today.split('-').map(Number), now = Date.now();
   const docs = items.map((x, i) => ({
-    id: Utilities.getUuid().replace(/-/g, '').slice(0, 20), type: x.type, item: x.item, category: x.category, amount: x.amount,
+    id: Utilities.getUuid().replace(/-/g, '').slice(0, 20), type: x.type, item: x.item, category: x.category, amount: x.amount, note: x.who || '',
     date: Utilities.formatDate(new Date(y, mo - 1, d + x.day_offset, 12), 'Africa/Cairo', 'yyyy-MM-dd'), ts: now + i
   }));
   const total = items.filter(x => x.type !== 'دخل').reduce((s, x) => s + x.amount, 0);
   const inc = items.filter(x => x.type === 'دخل').reduce((s, x) => s + x.amount, 0);
-  const summary = items.length ? items.map(x => (x.type === 'دخل' ? 'دخل: ' : '') + x.item + ' ' + ar(x.amount) + ' ج (' + x.category + ')').join('\n') +
+  const summary = items.length ? items.map(x => (x.type === 'دخل' ? 'دخل: ' : '') + x.item + ' ' + ar(x.amount) + ' ج (' + x.category + (x.who ? ' · ' + x.who : '') + ')').join('\n') +
     (total ? '\nإجمالي المصروف ' + ar(total) + ' ج' : '') + (inc ? '\nإجمالي الدخل ' + ar(inc) + ' ج' : '') : 'مسمعتش مبلغ';
   const token = Utilities.getUuid().slice(0, 8);
   if (docs.length) CacheService.getScriptCache().put('t_' + token, JSON.stringify(docs), 1800);

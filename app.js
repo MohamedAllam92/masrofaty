@@ -1,6 +1,21 @@
 (function(){
 const CATS=["مصروف البيت","بقالة وسوبرماركت","خضار وفاكهة","لحوم وفراخ وسمك","عيش وفطار","أكل برا وديليفري","قهوة وشاي ومشروبات","حلويات وتسالي","مواصلات","عربية وبنزين","إيجار وأقساط سكن","كهربا وميه وغاز","تليفون ونت","صيانة وتصليحات","أدوات منزلية ومنظفات","أولاد ومدارس","دروس وتعليم","دكاترة وتحاليل","أدوية وصيدلية","حلاقة وعناية شخصية","لبس وجزم","خروجات وترفيه","سفر ومصايف","هدايا ومناسبات","صدقات وزكاة","جمعيات وأقساط","اشتراكات ونادي","سجاير","شغل ومصاريف مهنية"];
-const INC=["مرتب","دخل إضافي"];
+const INC=["مرتب","مكافأة","لجنة","حافز","دخل إضافي","رصيد مرحّل"];
+/* المصروف ده لمين: بيتحفظ في خانة note */
+const WHO=["ليا","لمراتي","للبيت","للعيال","مرافق"];
+const WHO_L={"ليا":"مصاريفي الشخصية","لمراتي":"مراتي","للبيت":"البيت","للعيال":"ولادي","مرافق":"مرافق البيت"};
+function guessWho(it,cat){const s=String(it||""),c=cat||"";
+  if(/للبيت/.test(s)) return "للبيت";
+  if(/حمز|عمر|الولاد|للولاد|العيال|للعيال|الأولاد|للأولاد|الاولاد|للاولاد|حضان|مدرس|سباح|(^|\s)(ال|لل)?نادي|بامبرز|فيتو|درس/.test(s)||c==="أولاد ومدارس"||c==="دروس وتعليم") return "للعيال";
+  if(/مراتي|المدام|للمدام|زوجتي|للست/.test(s)) return "لمراتي";
+  if(/(^|\s)ليا(\s|$)|شخصي|لبطني/.test(s)) return "ليا";
+  if(c==="مصروف البيت") return "لمراتي";
+  if(c==="كهربا وميه وغاز"||c==="إيجار وأقساط سكن") return "مرافق";
+  if(c==="تليفون ونت") return /فاتور|باق|شحن|كارت|راوتر|خط/.test(s)?"مرافق":"ليا";
+  if(["بقالة وسوبرماركت","خضار وفاكهة","لحوم وفراخ وسمك","أدوات منزلية ومنظفات"].includes(c)) return "للبيت";
+  return "ليا"}
+const whoOf=i=>WHO.includes(i.note)?i.note:guessWho(i.item,i.category);
+const whoSure=i=>WHO.includes(i.note);
 const isInc=i=>i.type==="دخل";
 const $=id=>document.getElementById(id);
 const fmt=n=>(Math.round(n*100)/100).toLocaleString("ar-EG");
@@ -117,7 +132,7 @@ function localParse(text){
   }
   return out;
 }
-function guessInc(s){return /مرتب|ماهي/.test(s)?"مرتب":"دخل إضافي"}
+function guessInc(s){return /مرتب|ماهي/.test(s)?"مرتب":/مكاف/.test(s)?"مكافأة":/لجن/.test(s)?"لجنة":/حافز|حوافز/.test(s)?"حافز":/مرح|متبقي|باقي من/.test(s)?"رصيد مرحّل":"دخل إضافي"}
 function guessCat(s){
   const m=[
   ["حلاقة وعناية شخصية",/حلاق|حلقت|شعر|دقن|ذقن|كوافير|مكياج|برفان|ريحه|ريحة|شامبو|معجون|كريم|موس/],
@@ -165,15 +180,16 @@ async function aiParse(text){
 افهم كل بند واختار أدق تصنيف ممكن (مثلاً الحلاقة = "حلاقة وعناية شخصية"، الكشري = "أكل برا وديليفري"، فيوري أو فينو للولاد = "حلويات وتسالي"، فيتو (فيتو للولاد) = "أولاد ومدارس" دايماً، مصروف البيت للزوجة = "مصروف البيت"، توكتوك أو مواصلات حمزة أو المدرسة = "أولاد ومدارس" مش "مواصلات"). ممنوع تصنيف "تاني" أو "أخرى" نهائياً: لازم تختار أقرب تصنيف من القايمة.
 اسم البند يكون قصير وواضح بالعربي (كلمة لـ ٤ كلمات) من غير "صرفت" أو "اشتريت".
 تصنيف المصروف لازم يكون واحد من دول بالظبط: ${CATS.join("، ")}.
-تصنيف الدخل: "مرتب" للمرتب، وأي دخل تاني (مكافأة، لجنة، حافز، شغل…) يكون "دخل إضافي"، واسم البند يكون نوعه زي ما الشخص قاله (مثلاً "مكافأة" أو "لجنة").
+تصنيف الدخل لازم يكون واحد من دول بالظبط: ${INC.join("، ")} ("مرتب" للمرتب، "مكافأة" للمكافأة، "لجنة" للجان، "حافز" للحوافز، "رصيد مرحّل" للفلوس اللي فاضلة من الشهر اللي فات، وأي دخل تاني "دخل إضافي")، واسم البند يكون زي ما الشخص قاله.
+لكل مصروف حدد "who" (المصروف ده لمين) واحد من دول بالظبط: "ليا" (مصاريفه الشخصية: قهوة، سجاير، فطاره، مواصلاته، حلاقة، لبسه، علاجه)، "لمراتي" (مصروف البيت اللي بيديه للمدام أو حاجة جابها لها)، "للبيت" (أكل وطلبات البيت: بقالة، خضار، لحمة، منظفات)، "للعيال" (حمزة وعمر: مدرسة، درس، سباحة، نادي، حضانة، توكتوك المدرسة، دكاترتهم وعلاجهم، فينو وفيتو للولاد، بامبرز)، "مرافق" (كهربا، مية، غاز، فواتير التليفون والنت). لو قال صراحة "ليا" أو "للعيال" أو "للبيت" أو "لمراتي" التزم بكلامه.
 لو الكلام بيقول "امبارح" حط day_offset = -1، "أول امبارح" = -2، غير كده 0.
-رد بـ JSON بس بالشكل ده: {"items":[{"type":"مصروف","item":"عيش","amount":10,"category":"أكل وشرب","day_offset":0}]}
+رد بـ JSON بس بالشكل ده: {"items":[{"type":"مصروف","item":"عيش","amount":10,"category":"عيش وفطار","who":"للبيت","day_offset":0}]}
 لو مفيش أي مبلغ رد {"items":[]}.`;
   const r=await samp.json(prompt,{modelTier:"quick",cache:false});
   if(!r||!Array.isArray(r.items)) return null;
   return r.items.filter(x=>x&&+x.amount>0).map(x=>{const inc=x.type==="دخل";const L=inc?INC:CATS;
     return {type:inc?"دخل":"مصروف",item:String(x.item||"مصروف").slice(0,60),amount:+x.amount,
-    category:L.includes(x.category)?x.category:(inc?guessInc(String(x.item||"")):guessCat(String(x.item||""))),day_offset:Math.max(-7,Math.min(0,parseInt(x.day_offset)||0))}});
+    category:L.includes(x.category)?x.category:(inc?guessInc(String(x.item||"")):guessCat(String(x.item||""))),day_offset:Math.max(-7,Math.min(0,parseInt(x.day_offset)||0)),who:WHO.includes(x.who)?x.who:""}});
 }
 
 /* ---------- preview ---------- */
@@ -194,13 +210,17 @@ function showPreview(){
     ["مصروف","دخل"].forEach(n=>{const o=document.createElement("option");o.textContent=n;if(n===(d.type||"مصروف"))o.selected=true;ty.appendChild(o)});
     const c=document.createElement("select"); c.id="pvc"+k; c.setAttribute("aria-label","التصنيف");
     const fill=()=>{c.innerHTML="";(d.type==="دخل"?INC:CATS).forEach(n=>{const o=document.createElement("option");o.textContent=n;if(n===d.category)o.selected=true;c.appendChild(o)});d.category=c.value};
-    fill(); c.onchange=()=>{d.category=c.value};
-    ty.onchange=()=>{d.type=ty.value; fill()};
-    const sel=document.createElement("div"); sel.className="pvsel"; sel.append(ty,c);
+    const w=document.createElement("select"); w.id="pvw"+k; w.setAttribute("aria-label","لمين");
+    const wfill=()=>{w.innerHTML="";w.hidden=d.type==="دخل";if(w.hidden)return;if(!WHO.includes(d.who))d.who=guessWho(d.item,d.category);
+      WHO.forEach(n=>{const o=document.createElement("option");o.textContent=n;if(n===d.who)o.selected=true;w.appendChild(o)})};
+    fill(); wfill(); c.onchange=()=>{d.category=c.value;if(!d.whoSet){d.who="";wfill()}};
+    w.onchange=()=>{d.who=w.value;d.whoSet=1};
+    ty.onchange=()=>{d.type=ty.value; fill(); wfill()};
+    const sel=document.createElement("div"); sel.className="pvsel"; sel.append(ty,c,w);
     const sm=document.createElement("button"); sm.type="button"; sm.className="pvs";
     const upd=()=>{sm.className="pvs"+(d.type==="دخل"?" in":"");sm.innerHTML="";const n=document.createElement("span");n.textContent=d.item||"—";
       const v=document.createElement("span");v.className="a";v.textContent=(d.type==="دخل"?"+ ":"")+fmt(d.amount||0);
-      const cc=document.createElement("span");cc.className="c";cc.textContent=(d.type==="دخل"?"دخل · ":"")+(d.category||"");sm.append(n,v,cc)};
+      const cc=document.createElement("span");cc.className="c";cc.textContent=(d.type==="دخل"?"دخل · ":"")+(d.category||"")+(d.type!=="دخل"&&d.who?" · "+d.who:"");sm.append(n,v,cc)};
     upd(); sm.onclick=()=>r.classList.toggle("open");
     r.addEventListener("input",upd); r.addEventListener("change",upd);
     r.append(sm,t,a,x,sel); pv.appendChild(r);
@@ -215,7 +235,7 @@ function showPreview(){
     const base=$("d").value||todayIso();
     const list=draft.filter(x=>x.amount>0).map(x=>{const [y,m,dd]=base.split("-").map(Number);
       const dt=new Date(y,m-1,dd+(x.day_offset||0));
-      return {type:x.type||"مصروف",item:x.item.trim()||"مصروف",amount:x.amount,category:x.category,date:iso(dt),ts:Date.now()}});
+      return {type:x.type||"مصروف",item:x.item.trim()||"مصروف",amount:x.amount,category:x.category,date:iso(dt),ts:Date.now(),note:(x.type||"مصروف")==="دخل"?"":(WHO.includes(x.who)?x.who:guessWho(x.item,x.category))}});
     try{await addItems(list); setSt("اتحفظ "+list.length+" بند ✓"); draft=[]; pvDirty=false; lastParsed=""; clearTimeout(autoT); showPreview(); $("say").value="";}
     catch(e){setSt("محصلش حفظ، جرب تاني",true); ok.disabled=false}
   };
@@ -292,7 +312,7 @@ $("go").onclick=async()=>{
         const r=await window.mApi({action:"parse",audio:b64,mime:"audio/wav",today:todayIso()},45000);
         const said=(r.transcript||"").trim();
         if(said){ta.value=(base?base+" ":"")+said; lastParsed=ta.value.trim()}
-        show((r.items||[]).map(x=>({type:x.type,item:x.item,amount:+x.amount,category:x.category,day_offset:x.day_offset||0})));
+        show((r.items||[]).map(x=>({type:x.type,item:x.item,amount:+x.amount,category:x.category,who:x.who||"",day_offset:x.day_offset||0})));
       }
     }catch(e){
       if(live){ setSt("بفهم من الكلام المكتوب…"); try{show(await fromText(live))}catch(_){setSt("محصلش فهم، جرّب تاني",true)} }
@@ -318,7 +338,10 @@ function editForm(i){
   const c=document.createElement("select");c.id="edc";c.setAttribute("aria-label","التصنيف");
   const fill=()=>{const L0=d.type==="دخل"?INC:CATS;const L=L0.includes(d.category)?L0:[d.category].concat(L0);c.innerHTML="";
     L.forEach(n=>{const o=document.createElement("option");o.textContent=n;if(n===d.category)o.selected=true;c.appendChild(o)})};
-  fill(); c.onchange=()=>{d.category=c.value}; ty.onchange=()=>{d.type=ty.value;fill()};
+  const w=document.createElement("select");w.id="edw";w.className="full";w.setAttribute("aria-label","لمين");
+  const wfill=()=>{w.innerHTML="";w.hidden=d.type==="دخل";if(!WHO.includes(d.who))d.who=guessWho(d.item,d.category);
+    WHO.forEach(n=>{const o=document.createElement("option");o.textContent="لمين: "+n;o.value=n;if(n===d.who)o.selected=true;w.appendChild(o)})};
+  fill(); wfill(); c.onchange=()=>{d.category=c.value}; ty.onchange=()=>{d.type=ty.value;fill();wfill()}; w.onchange=()=>{d.who=w.value};
   const dt=document.createElement("input");dt.type="date";dt.id="edd";dt.className="full";dt.value=d.date;dt.setAttribute("aria-label","التاريخ");dt.onchange=()=>{d.date=dt.value};
   const b=document.createElement("div");b.className="btns";
   const ok=document.createElement("button");ok.type="button";ok.className="primary";ok.textContent="احفظ التعديل";
@@ -327,12 +350,12 @@ function editForm(i){
   ok.onclick=async()=>{
     if(!(d.amount>0)){setSt("اكتب مبلغ أكبر من صفر",true);return}
     ok.disabled=true;
-    const id=editId; const data={item:d.item.trim()||"مصروف",amount:d.amount,type:d.type,category:d.category,date:d.date||i.date};
+    const id=editId; const data={item:d.item.trim()||"مصروف",amount:d.amount,type:d.type,category:d.category,date:d.date||i.date,note:d.type==="دخل"?"":(d.who||"")};
     try{editId=null;editDraft=null;await updateItem(id,data);setSt("اتعدّل: "+data.item);render()}
     catch(e){editId=id;editDraft=d;ok.disabled=false;setSt("محصلش حفظ للتعديل، جرب تاني",true)}
   };
   b.append(ok,no);
-  f.append(t,a,ty,c,dt,b);
+  f.append(t,a,ty,c,w,dt,b);
   return f;
 }
 
@@ -358,7 +381,7 @@ async function syncSheet(){
     const n=rows.length, last=Math.max(n,1)+1, vals=[];
     const E9=["","","","","","","","",""];
     rows.forEach(it=>{const a=+it.amount||0,[y,m,d]=it.date.split("-"),inc=isInc(it),[py,pm]=periodOf(it.date).split("-");
-      vals.push([MN[+pm-1]+" "+AD(py),AD(y+"/"+m+"/"+d),it.item,it.category||"مصروف البيت",inc?AN(a):"",inc?"":AN(a),py+"-"+pm+"-01",inc?a:"",inc?"":a])});
+      vals.push([MN[+pm-1]+" "+AD(py),AD(y+"/"+m+"/"+d),it.item,(it.category||"مصروف البيت")+(inc?"":" · "+whoOf(it)),inc?AN(a):"",inc?"":AN(a),py+"-"+pm+"-01",inc?a:"",inc?"":a])});
     vals.push(E9.slice());
     vals.push(["","","الإجمالي","",ARF(`SUM(H2:H${last})`),ARF(`SUM(I2:I${last})`),"","",""]);
     vals.push(["","","المتبقي (الدخل - المصروف)","",ARF(`SUM(H2:H${last})-SUM(I2:I${last})`),"","","",""]);
@@ -428,12 +451,15 @@ async function syncMonthTabs(mcp,rows){
     const vals=[[title,"","","","","",""],["من "+dFull(rg.start)+" إلى "+dFull(rg.end),"","","","","",""],
       ["التاريخ","البند","التصنيف","الدخل","المصروف","دخل","مصروف"]];
     its.forEach(it=>{const a=+it.amount||0,inc=isInc(it);
-      vals.push([dFull(it.date),it.item,it.category||"مصروف البيت",inc?AN(a):"",inc?"":AN(a),inc?a:"",inc?"":a])});
+      vals.push([dFull(it.date),it.item,(it.category||"مصروف البيت")+(inc?"":" · "+whoOf(it)),inc?AN(a):"",inc?"":AN(a),inc?a:"",inc?"":a])});
     const last=Math.max(its.length,1)+3;
     vals.push(E7.slice());
     vals.push(["","إجمالي الدخل في الشهر","",ARF(`SUM(F4:F${last})`),"","",""]);
     vals.push(["","إجمالي المصروف في الشهر","","",ARF(`SUM(G4:G${last})`),"",""]);
     vals.push(["","المتبقي (الدخل - المصروف)","",ARF(`SUM(F4:F${last})-SUM(G4:G${last})`),"","",""]);
+    {const bw={};WHO.forEach(w=>bw[w]=0);its.filter(i=>!isInc(i)).forEach(i=>bw[whoOf(i)]+=(+i.amount||0));
+     vals.push(E7.slice());vals.push(["","المصروف حسب لمين","","","","",""]);
+     WHO.forEach(w=>vals.push(["",WHO_L[w],"","",AN(bw[w]),"",""]));}
     let prev=0; try{prev=parseInt(localStorage.getItem("gsT:"+k))||0}catch(e){}
     const total=Math.max(vals.length,prev)+10;
     while(vals.length<total) vals.push(E7.slice());
@@ -489,7 +515,7 @@ function render(){
    $("stT").textContent=pName(mon); $("stR").textContent="من "+dFull(rg.start)+" إلى "+dFull(rg.end);
    if(!rows.length){const tr=document.createElement("tr");tr.innerHTML='<td colspan="5">لسه مفيش حركات</td>';sb.appendChild(tr)}
    rows.forEach(i=>{const tr=document.createElement("tr"),inc=isInc(i);
-     [dFull(i.date),i.item,i.category||"مصروف البيت",inc?fmt(+i.amount||0):"",inc?"":fmt(+i.amount||0)].forEach((v,j)=>{const td=document.createElement("td");td.textContent=v;if(j===3)td.className="i";if(j===4)td.className="e";tr.appendChild(td)});
+     [dFull(i.date),i.item,(i.category||"مصروف البيت")+(inc?"":" · "+whoOf(i)),inc?fmt(+i.amount||0):"",inc?"":fmt(+i.amount||0)].forEach((v,j)=>{const td=document.createElement("td");td.textContent=v;if(j===3)td.className="i";if(j===4)td.className="e";tr.appendChild(td)});
      sb.appendChild(tr)});
    $("sI").textContent=fmt(inc);$("sE").textContent=fmt(exp);$("sB").textContent=fmt(inc-exp);
    let gid=+mon.replace("-","");try{gid=parseInt(localStorage.getItem("gsG:"+mon))||gid}catch(e){}
@@ -504,6 +530,12 @@ function render(){
     const b=document.createElement("div");b.className="bar";const i=document.createElement("i");i.style.width=(max?v/max*100:0)+"%";b.appendChild(i);
     const s=document.createElement("span");s.className="v";s.textContent=fmt(v);
     r.append(n,b,s);cats.appendChild(r)});
+  {const bw={};WHO.forEach(w=>bw[w]=0);let gs=0;monItems.forEach(i=>{bw[whoOf(i)]+=(+i.amount||0);if(!whoSure(i))gs++});
+   const mx=Math.max(0,...Object.values(bw)),box=$("whos");box.innerHTML="";
+   WHO.forEach(w=>{const r=document.createElement("div");r.className="cat";const n=document.createElement("span");n.textContent=WHO_L[w];
+     const b=document.createElement("div");b.className="bar";const i=document.createElement("i");i.style.width=(mx?bw[w]/mx*100:0)+"%";b.appendChild(i);
+     const s=document.createElement("span");s.className="v";s.textContent=fmt(bw[w]);r.append(n,b,s);box.appendChild(r)});
+   $("whoN").textContent=gs?DIG(gs)+" بند مش متحدد لمين، اتحسبوا بالتخمين (جنبهم علامة ؟). دوس «تعديل» على البند واختار لمين.":"كل البنود متحدد لمين ✓";}
   const list=$("list"); list.innerHTML="";
   if(!monAll.length){list.innerHTML='<div class="empty">'+(items.length?"مفيش حركات في "+pName(mon):"أول ما تسجل مصروف أو دخل هيظهر هنا، مقسم بالأيام")+'</div>';return}
   const days={}; monAll.forEach(i=>{(days[i.date]=days[i.date]||[]).push(i)});
@@ -525,12 +557,12 @@ function render(){
     h.append(a,rr);g.appendChild(h);
     days[d].forEach(i=>{const r=document.createElement("div");r.className="ent"+(isInc(i)?" in":"");
       const t=document.createElement("div");t.className="t";t.textContent=i.item;
-      const c=document.createElement("span");c.className="c";c.textContent=(isInc(i)?"دخل · ":"")+(i.category||"مصروف البيت");t.appendChild(c);
+      const c=document.createElement("span");c.className="c";c.textContent=(isInc(i)?"دخل · ":"")+(i.category||"مصروف البيت")+(isInc(i)?"":" · "+whoOf(i)+(whoSure(i)?"":"؟"));t.appendChild(c);
       const v=document.createElement("span");v.className="a";v.textContent=(isInc(i)?"+ ":"")+fmt(+i.amount||0);
       if(editId===i.id){g.appendChild(editForm(i));return}
       const acts=document.createElement("span");acts.className="acts";
       const ed=document.createElement("button");ed.type="button";ed.className="ed";ed.textContent="تعديل";ed.setAttribute("aria-label","عدّل "+i.item);
-      ed.onclick=()=>{editId=i.id;editDraft={item:i.item,amount:+i.amount||0,type:isInc(i)?"دخل":"مصروف",category:i.category||"مصروف البيت",date:i.date};render()};
+      ed.onclick=()=>{editId=i.id;editDraft={item:i.item,amount:+i.amount||0,type:isInc(i)?"دخل":"مصروف",category:i.category||"مصروف البيت",date:i.date,who:isInc(i)?"":whoOf(i)};render()};
       const x=document.createElement("button");x.type="button";x.className="rm";x.textContent="مسح";x.setAttribute("aria-label","امسح "+i.item);
       x.onclick=()=>{ if(x.classList.contains("c")){x.disabled=true;removeItem(i.id).then(()=>setSt("اتمسح: "+i.item)).catch(()=>setSt("محصلش مسح، جرب تاني",true))} else {x.classList.add("c");x.textContent="متأكد؟";
         setTimeout(()=>{if(x.isConnected&&!x.disabled){x.classList.remove("c");x.textContent="مسح"}},3000)} };
@@ -551,7 +583,7 @@ function buildXlsx(){
     P("A1",{t:"s",v:pName(k)}); P("A2",{t:"s",v:"من "+dFull(rg.start)+" إلى "+dFull(rg.end)});
     ["التاريخ","البند","التصنيف","الدخل (جنيه)","المصروف (جنيه)"].forEach((h,i)=>P(X.utils.encode_cell({r:2,c:i}),{t:"s",v:h}));
     its.forEach((it,j)=>{const r=4+j,a=+it.amount||0;
-      P("A"+r,{t:"s",v:dFull(it.date)});P("B"+r,{t:"s",v:it.item});P("C"+r,{t:"s",v:it.category||"مصروف البيت"});
+      P("A"+r,{t:"s",v:dFull(it.date)});P("B"+r,{t:"s",v:it.item});P("C"+r,{t:"s",v:(it.category||"مصروف البيت")+(isInc(it)?"":" · "+whoOf(it))});
       if(isInc(it)) P("D"+r,{t:"n",v:a,z:NUM}); else P("E"+r,{t:"n",v:a,z:NUM});});
     const last=Math.max(its.length,1)+3, s0=last+2;
     P("B"+s0,{t:"s",v:"إجمالي الدخل في الشهر"});P("D"+s0,{t:"n",f:`SUM(D4:D${last})`,z:NUM});
@@ -668,6 +700,7 @@ $("xl").onclick=async()=>{
     else if(a==="search"){openP("search");setTimeout(()=>{const i=$("qIn");i&&i.focus()},80)}
     else if(a==="month")go($("mName").closest(".card"));
     else if(a==="cat")go($("cats").closest(".card"));
+    else if(a==="who")go($("whos").closest(".card"));
     else if(a==="sheet")go($("stB").closest(".card"));
     else if(a==="all")go($("months").closest(".card"));
     else if(a==="xl")$("xl").click();
