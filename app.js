@@ -16,6 +16,7 @@ function guessWho(it,cat){const s=String(it||""),c=cat||"";
   return "ليا"}
 const whoOf=i=>WHO.includes(i.note)?i.note:guessWho(i.item,i.category);
 const whoSure=i=>WHO.includes(i.note);
+const catW=i=>isInc(i)?(i.category||""):whoOf(i)+" ("+(i.category||"مصروف البيت")+")";
 const isInc=i=>i.type==="دخل";
 const $=id=>document.getElementById(id);
 const fmt=n=>(Math.round(n*100)/100).toLocaleString("ar-EG");
@@ -222,7 +223,7 @@ function showPreview(){
     const sm=document.createElement("button"); sm.type="button"; sm.className="pvs";
     const upd=()=>{sm.className="pvs"+(d.type==="دخل"?" in":"");sm.innerHTML="";const n=document.createElement("span");n.textContent=d.item||"—";
       const v=document.createElement("span");v.className="a";v.textContent=(d.type==="دخل"?"+ ":"")+fmt(d.amount||0);
-      const cc=document.createElement("span");cc.className="c";cc.textContent=(d.type==="دخل"?"دخل · ":"")+(d.category||"")+(d.type!=="دخل"&&d.who?" · "+d.who:"");sm.append(n,v,cc)};
+      const cc=document.createElement("span");cc.className="c";cc.textContent=d.type==="دخل"?"دخل · "+(d.category||""):(d.who||"")+" ("+(d.category||"")+")";sm.append(n,v,cc)};
     upd(); sm.onclick=()=>r.classList.toggle("open");
     r.addEventListener("input",upd); r.addEventListener("change",upd);
     r.append(sm,t,a,x,sel); pv.appendChild(r);
@@ -384,7 +385,7 @@ async function syncSheet(){
     const n=rows.length, last=Math.max(n,1)+1, vals=[];
     const E9=["","","","","","","","",""];
     rows.forEach(it=>{const a=+it.amount||0,[y,m,d]=it.date.split("-"),inc=isInc(it),[py,pm]=periodOf(it.date).split("-");
-      vals.push([MN[+pm-1]+" "+AD(py),AD(y+"/"+m+"/"+d),it.item,(it.category||"مصروف البيت")+(inc?"":" · "+whoOf(it)),inc?AN(a):"",inc?"":AN(a),py+"-"+pm+"-01",inc?a:"",inc?"":a])});
+      vals.push([MN[+pm-1]+" "+AD(py),AD(y+"/"+m+"/"+d),it.item,catW(it),inc?AN(a):"",inc?"":AN(a),py+"-"+pm+"-01",inc?a:"",inc?"":a])});
     vals.push(E9.slice());
     vals.push(["","","الإجمالي","",ARF(`SUM(H2:H${last})`),ARF(`SUM(I2:I${last})`),"","",""]);
     vals.push(["","","المتبقي (الدخل - المصروف)","",ARF(`SUM(H2:H${last})-SUM(I2:I${last})`),"","","",""]);
@@ -454,7 +455,7 @@ async function syncMonthTabs(mcp,rows){
     const vals=[[title,"","","","","",""],["من "+dFull(rg.start)+" إلى "+dFull(rg.end),"","","","","",""],
       ["التاريخ","البند","التصنيف","الدخل","المصروف","دخل","مصروف"]];
     its.forEach(it=>{const a=+it.amount||0,inc=isInc(it);
-      vals.push([dFull(it.date),it.item,(it.category||"مصروف البيت")+(inc?"":" · "+whoOf(it)),inc?AN(a):"",inc?"":AN(a),inc?a:"",inc?"":a])});
+      vals.push([dFull(it.date),it.item,catW(it),inc?AN(a):"",inc?"":AN(a),inc?a:"",inc?"":a])});
     const last=Math.max(its.length,1)+3;
     vals.push(E7.slice());
     vals.push(["","إجمالي الدخل في الشهر","",ARF(`SUM(F4:F${last})`),"","",""]);
@@ -462,7 +463,9 @@ async function syncMonthTabs(mcp,rows){
     vals.push(["","المتبقي (الدخل - المصروف)","",ARF(`SUM(F4:F${last})-SUM(G4:G${last})`),"","",""]);
     {const bw={};WHO.forEach(w=>bw[w]=0);its.filter(i=>!isInc(i)).forEach(i=>bw[whoOf(i)]+=(+i.amount||0));
      vals.push(E7.slice());vals.push(["","المصروف حسب لمين","","","","",""]);
-     WHO.forEach(w=>vals.push(["",WHO_L[w],"","",AN(bw[w]),"",""]));}
+     WHO.forEach(w=>{vals.push(["",WHO_L[w],"","",AN(bw[w]),"",""]);const sub={};
+       its.filter(i=>!isInc(i)&&whoOf(i)===w).forEach(i=>{const c=i.category||"مصروف البيت";sub[c]=(sub[c]||0)+(+i.amount||0)});
+       Object.entries(sub).sort((a,b)=>b[1]-a[1]).forEach(([c,x])=>vals.push(["","("+c+")","","",AN(x),"",""]))});}
     let prev=0; try{prev=parseInt(localStorage.getItem("gsT:"+k))||0}catch(e){}
     const total=Math.max(vals.length,prev)+10;
     while(vals.length<total) vals.push(E7.slice());
@@ -518,7 +521,7 @@ function render(){
    $("stT").textContent=pName(mon); $("stR").textContent="من "+dFull(rg.start)+" إلى "+dFull(rg.end);
    if(!rows.length){const tr=document.createElement("tr");tr.innerHTML='<td colspan="5">لسه مفيش حركات</td>';sb.appendChild(tr)}
    rows.forEach(i=>{const tr=document.createElement("tr"),inc=isInc(i);
-     [dFull(i.date),i.item,(i.category||"مصروف البيت")+(inc?"":" · "+whoOf(i)),inc?fmt(+i.amount||0):"",inc?"":fmt(+i.amount||0)].forEach((v,j)=>{const td=document.createElement("td");td.textContent=v;if(j===3)td.className="i";if(j===4)td.className="e";tr.appendChild(td)});
+     [dFull(i.date),i.item,catW(i),inc?fmt(+i.amount||0):"",inc?"":fmt(+i.amount||0)].forEach((v,j)=>{const td=document.createElement("td");td.textContent=v;if(j===3)td.className="i";if(j===4)td.className="e";tr.appendChild(td)});
      sb.appendChild(tr)});
    $("sI").textContent=fmt(inc);$("sE").textContent=fmt(exp);$("sB").textContent=fmt(inc-exp);
    let gid=+mon.replace("-","");try{gid=parseInt(localStorage.getItem("gsG:"+mon))||gid}catch(e){}
@@ -535,9 +538,15 @@ function render(){
     r.append(n,b,s);cats.appendChild(r)});
   {const bw={};WHO.forEach(w=>bw[w]=0);let gs=0;monItems.forEach(i=>{bw[whoOf(i)]+=(+i.amount||0);if(!whoSure(i))gs++});
    const mx=Math.max(0,...Object.values(bw)),box=$("whos");box.innerHTML="";
-   WHO.forEach(w=>{const r=document.createElement("div");r.className="cat";const n=document.createElement("span");n.textContent=WHO_L[w];
-     const b=document.createElement("div");b.className="bar";const i=document.createElement("i");i.style.width=(mx?bw[w]/mx*100:0)+"%";b.appendChild(i);
-     const s=document.createElement("span");s.className="v";s.textContent=fmt(bw[w]);r.append(n,b,s);box.appendChild(r)});
+   WHO.forEach(w=>{const sub={};monItems.forEach(i=>{if(whoOf(i)===w){const c=i.category||"مصروف البيت";sub[c]=(sub[c]||0)+(+i.amount||0)}});
+     const det=document.createElement("details");det.className="dtc";const sm=document.createElement("summary");
+     const n=document.createElement("span");n.className="n";n.textContent=WHO_L[w];const v=document.createElement("span");v.className="v";v.textContent=fmt(bw[w])+" ج";
+     sm.append(n,v);det.appendChild(sm);
+     Object.entries(sub).sort((a,b)=>b[1]-a[1]).forEach(([c,x])=>{const r=document.createElement("div");r.className="res";
+       const a=document.createElement("span");a.textContent="("+c+")";const b=document.createElement("span");b.className="a";b.textContent=fmt(x);r.append(a,b);det.appendChild(r)});
+     window._wo=window._wo||new Set(); if(window._wo.has(w))det.open=true;
+     det.ontoggle=()=>{det.open?window._wo.add(w):window._wo.delete(w)};
+     box.appendChild(det)});
    $("whoN").textContent=gs?DIG(gs)+" بند مش متحدد لمين، اتحسبوا بالتخمين (جنبهم علامة ؟). دوس «تعديل» على البند واختار لمين.":"كل البنود متحدد لمين ✓";}
   const list=$("list"); list.innerHTML="";
   if(!monAll.length){list.innerHTML='<div class="empty">'+(items.length?"مفيش حركات في "+pName(mon):"أول ما تسجل مصروف أو دخل هيظهر هنا، مقسم بالأيام")+'</div>';return}
@@ -560,7 +569,7 @@ function render(){
     h.append(a,rr);g.appendChild(h);
     days[d].forEach(i=>{const r=document.createElement("div");r.className="ent"+(isInc(i)?" in":"");
       const t=document.createElement("div");t.className="t";t.textContent=i.item;
-      const c=document.createElement("span");c.className="c";c.textContent=(isInc(i)?"دخل · ":"")+(i.category||"مصروف البيت")+(isInc(i)?"":" · "+whoOf(i)+(whoSure(i)?"":"؟"));t.appendChild(c);
+      const c=document.createElement("span");c.className="c";c.textContent=isInc(i)?"دخل · "+(i.category||""):whoOf(i)+(whoSure(i)?"":"؟")+" ("+(i.category||"مصروف البيت")+")";t.appendChild(c);
       const v=document.createElement("span");v.className="a";v.textContent=(isInc(i)?"+ ":"")+fmt(+i.amount||0);
       if(editId===i.id){g.appendChild(editForm(i));return}
       const acts=document.createElement("span");acts.className="acts";
@@ -586,7 +595,7 @@ function buildXlsx(){
     P("A1",{t:"s",v:pName(k)}); P("A2",{t:"s",v:"من "+dFull(rg.start)+" إلى "+dFull(rg.end)});
     ["التاريخ","البند","التصنيف","الدخل (جنيه)","المصروف (جنيه)"].forEach((h,i)=>P(X.utils.encode_cell({r:2,c:i}),{t:"s",v:h}));
     its.forEach((it,j)=>{const r=4+j,a=+it.amount||0;
-      P("A"+r,{t:"s",v:dFull(it.date)});P("B"+r,{t:"s",v:it.item});P("C"+r,{t:"s",v:(it.category||"مصروف البيت")+(isInc(it)?"":" · "+whoOf(it))});
+      P("A"+r,{t:"s",v:dFull(it.date)});P("B"+r,{t:"s",v:it.item});P("C"+r,{t:"s",v:catW(it)});
       if(isInc(it)) P("D"+r,{t:"n",v:a,z:NUM}); else P("E"+r,{t:"n",v:a,z:NUM});});
     const last=Math.max(its.length,1)+3, s0=last+2;
     P("B"+s0,{t:"s",v:"إجمالي الدخل في الشهر"});P("D"+s0,{t:"n",f:`SUM(D4:D${last})`,z:NUM});
