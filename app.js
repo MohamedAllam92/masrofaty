@@ -564,8 +564,13 @@ function render(){
      const det=document.createElement("details");det.className="dtc";const sm=document.createElement("summary");
      const n=document.createElement("span");n.className="n";n.textContent=WHO_L[w];const v=document.createElement("span");v.className="v";v.textContent=fmt(bw[w])+" ج";
      sm.append(n,v);det.appendChild(sm);
-     Object.entries(sub).sort((a,b)=>b[1]-a[1]).forEach(([c,x])=>{const r=document.createElement("div");r.className="res";
-       const a=document.createElement("span");a.textContent="("+c+")";const b=document.createElement("span");b.className="a";b.textContent=fmt(x);r.append(a,b);det.appendChild(r)});
+     Object.entries(sub).sort((a,b)=>b[1]-a[1]).forEach(([c,x])=>{const sd=document.createElement("details");sd.className="dtc";sd.style.marginInlineStart="14px";
+       const ss=document.createElement("summary");const a=document.createElement("span");a.className="n";a.textContent="("+c+")";
+       const b=document.createElement("span");b.className="v";b.textContent=fmt(x);ss.append(a,b);sd.appendChild(ss);
+       monItems.filter(i=>whoOf(i)===w&&subOf(i)===c).sort((p,q)=>p.date<q.date?-1:p.date>q.date?1:0).forEach(i=>{const r=document.createElement("div");r.className="res";
+         const t=document.createElement("span");t.textContent=i.item;const v2=document.createElement("span");v2.className="a";v2.textContent=fmt(+i.amount||0);
+         const dd=document.createElement("span");dd.className="c";dd.textContent=dFull(i.date);r.append(t,v2,dd);sd.appendChild(r)});
+       det.appendChild(sd)});
      window._wo=window._wo||new Set(); if(window._wo.has(w))det.open=true;
      det.ontoggle=()=>{det.open?window._wo.add(w):window._wo.delete(w)};
      box.appendChild(det)});
