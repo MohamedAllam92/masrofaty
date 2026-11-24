@@ -147,8 +147,9 @@ ${typed ? 'النص: «' + typed + '»' : 'اسمع التسجيل الصوتي 
 ممنوع "تاني" أو "أخرى": اختار أقرب تصنيف.
 تصنيف الدخل واحد من دول بالظبط: ${INC.join('، ')} ("رصيد مرحّل" للفلوس اللي فاضلة من الشهر اللي فات، وأي دخل مش من دول "دخل إضافي").
 لكل مصروف حدد "who" (لمين) واحد من دول بالظبط: "ليا" (مصاريفه الشخصية: قهوة، سجاير، فطاره، مواصلاته، حلاقة، لبسه، علاجه)، "لمراتي" (مصروف البيت للمدام أو حاجة جابها لها)، "للبيت" (بقالة، خضار، لحمة، منظفات)، "للعيال" (حمزة وعمر: مدرسة، درس، سباحة، نادي، حضانة، توكتوك المدرسة، دكاترتهم، فينو وفيتو للولاد، بامبرز)، "مرافق" (كهربا، مية، غاز، فواتير التليفون والنت). لو قال لمين صراحة التزم بكلامه.
+ولكل مصروف حدد "sub" = تفصيل قصير (كلمة لـ ٣ كلمات) جوه خانته أدق من التصنيف، زي: سباحة، حضانة عمر، دروس حمزة، دكاترة وتحاليل حمزة، توكتوك ومواصلات العيال، فينو وحلويات للعيال، قهوة ومشروبات برا، سجاير وفيب، فطار، أكل برا، مواصلات، حلاقة، كي هدوم، علاج وأدوية، مصروف البيت (دفعات)، طلبات جبتها لها، بقالة وسوبرماركت، خضار وفاكهة، لحمة وفراخ وسمك، كهربا، مياه، غاز.
 "امبارح" = day_offset -1، "أول امبارح" = -2، غير كده 0.
-رد JSON بس: {"transcript":"...","items":[{"type":"مصروف","item":"عيش","amount":10,"category":"عيش وفطار","who":"للبيت","day_offset":0}]}`;
+رد JSON بس: {"transcript":"...","items":[{"type":"مصروف","item":"عيش","amount":10,"category":"عيش وفطار","who":"للبيت","sub":"عيش وفطار البيت","day_offset":0}]}`;
 }
 
 function parse(req, key) {
@@ -176,7 +177,7 @@ function parse(req, key) {
         return {
           type: inc ? 'دخل' : 'مصروف', item: String(x.item || 'مصروف').slice(0, 60), amount: +x.amount,
           category: L.indexOf(x.category) >= 0 ? x.category : (inc ? 'دخل إضافي' : 'مصروف البيت'),
-          who: !inc && WHO.indexOf(x.who) >= 0 ? x.who : '',
+          who: !inc && WHO.indexOf(x.who) >= 0 ? x.who : '', sub: inc ? '' : String(x.sub || '').slice(0, 30),
           day_offset: Math.max(-7, Math.min(0, parseInt(x.day_offset, 10) || 0))
         };
       });
@@ -191,7 +192,7 @@ function ready(items, today) {
   const ar = n => String(Math.round(n * 100) / 100).replace(/[0-9]/g, d => '٠١٢٣٤٥٦٧٨٩'[d]);
   const [y, mo, d] = today.split('-').map(Number), now = Date.now();
   const docs = items.map((x, i) => ({
-    id: Utilities.getUuid().replace(/-/g, '').slice(0, 20), type: x.type, item: x.item, category: x.category, amount: x.amount, note: x.who || '',
+    id: Utilities.getUuid().replace(/-/g, '').slice(0, 20), type: x.type, item: x.item, category: x.category, amount: x.amount, note: x.who ? x.who + (x.sub ? '|' + x.sub : '') : '',
     date: Utilities.formatDate(new Date(y, mo - 1, d + x.day_offset, 12), 'Africa/Cairo', 'yyyy-MM-dd'), ts: now + i
   }));
   const total = items.filter(x => x.type !== 'دخل').reduce((s, x) => s + x.amount, 0);
