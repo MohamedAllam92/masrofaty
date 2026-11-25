@@ -17,6 +17,41 @@ function guessWho(it,cat){const s=String(it||""),c=cat||"";
   return "ليا"}
 const whoOf=i=>{const w=String(i.note||"").split("|")[0];return WHO.includes(w)?w:guessWho(i.item,i.category)};
 const whoSure=i=>WHO.includes(String(i.note||"").split("|")[0]);
+/* العيال: حمزة / عمر / مشترك — الجزء التالت في note (لمين|التفصيل|الولد) */
+const KIDS=["حمزة","عمر","مشترك"];
+const KID_L={"حمزة":"حمزة","عمر":"عمر","مشترك":"مشترك (الاتنين)"};
+const WHO_UI=["ليا","لمراتي","للبيت","لحمزة","لعمر","للعيال (الاتنين)","مرافق"];
+const uiToWK=v=>v==="لحمزة"?["للعيال","حمزة"]:v==="لعمر"?["للعيال","عمر"]:(v==="للعيال (الاتنين)"||v==="للعيال")?["للعيال","مشترك"]:WHO.includes(v)?[v,""]:["",""];
+const wkToUi=(w,k)=>w==="للعيال"?(k==="حمزة"?"لحمزة":k==="عمر"?"لعمر":"للعيال (الاتنين)"):(WHO.includes(w)?w:"");
+function statedWho(s){s=String(s||"");
+  if(/مصروف البيت|مصاريف البيت|للبيت/.test(s)) return "للبيت";
+  if(/مراتي|المدام|للمدام|زوجتي|لزوجتي/.test(s)) return "لمراتي";
+  if(/حمز|عمر|العيال|للعيال|الولاد|للولاد|الأولاد|الاولاد|للأولاد|للاولاد|حضان|مدرس|(^|\s)و?(ال|لل)?درس|دروس|سباح|(^|\s)و?(ال|لل)?نادي/.test(s)) return "للعيال";
+  if(/(^|\s)ليا(\s|$)|لنفسي|شخصي/.test(s)) return "ليا";
+  if(/كهربا|فاتورة الم|غاز|انبوب|أنبوب|فاتورة التليفون|فاتورة النت|باقة النت|باقه النت/.test(s)) return "مرافق";
+  return ""}
+function guessKid(s){s=String(s||"");
+  if(/حمز/.test(s)&&!/عمر/.test(s)) return "حمزة";
+  if(/عمر/.test(s)&&!/حمز/.test(s)) return "عمر";
+  if(/حضان/.test(s)) return "عمر";
+  if(/(^|\s)و?(ال|لل)?نادي/.test(s)) return "مشترك";
+  if(/مدرس|(^|\s)و?(ال|لل)?درس|دروس/.test(s)) return "حمزة";
+  return "مشترك"}
+const kidOf=i=>{if(whoOf(i)!=="للعيال")return "";const k=String(i.note||"").split("|")[2];return KIDS.includes(k)?k:guessKid((i.item||"")+" "+subOf(i))};
+function purpOf(i){const s=subOf(i)+" "+(i.item||"");
+  if(/(^|\s)و?(ال|لل)?نادي/.test(s)) return "النادي";
+  if(/حضان/.test(s)) return "حضانة";
+  if(/سباح/.test(s)) return "سباحة";
+  if(/(^|\s)و?(ال|لل)?درس|دروس/.test(s)) return "درس";
+  if(/مدرس/.test(s)) return "مدرسة";
+  if(/دكت|دكاتر|تحاليل|تحليل|كشف|مستشف/.test(s)) return "دكاترة وتحاليل";
+  if(/علاج|دوا|أدوية|ادوية|صيدلي|تطعيم|مصل/.test(s)) return "علاج وأدوية";
+  if(/حلو|فينو|فيتو|بسك|شيبسي|عصير|كيك|شوكولات|شيكولات/.test(s)) return "حلويات وتسالي";
+  if(/لبس|جزم|شراب|كوتش|هدوم/.test(s)) return "لبس وجزم";
+  if(/بامبرز|حفاض|لبن/.test(s)) return "بامبرز ولبن";
+  if(/طابع|أوراق|اوراق|رسوم|شهاد/.test(s)) return "أوراق ورسوم";
+  if(/توك|مواصل|تاكس|اوبر|أوبر/.test(s)) return "مواصلات";
+  return subOf(i).replace(/\s*(حمزة|عمر)$/,"")||"طلبات العيال"}
 /* التفصيل جوه كل خانة: بيتحفظ في note بعد علامة | (لمين|التفصيل) */
 const SUBR=[
   [/سباح/,"سباحة"],[/حضان/,"حضانة"],[/(^|\s)و?(ال|لل)?نادي/,"النادي"],[/(^|\s)و?(ال|لل)?درس|دروس/,"دروس"],
@@ -38,8 +73,8 @@ function guessSub(it,cat,w){const s=String(it||""),c=cat||"",kid=w==="للعيا
   if(c==="مصروف البيت") return w==="ليا"?"فطار وأكل":/مصروف البيت|مصاريف البيت|مصروف الشهر|دفعة|دفعه/.test(s)?"مصروف البيت (دفعات)":w==="للبيت"?"طلبات البيت":"طلبات جبتها لها";
   return (M[c]||c||"مصروف البيت")+nm}
 const subOf=i=>{const p=String(i.note||"").split("|");return p[1]&&WHO.includes(p[0])?p[1]:guessSub(i.item,i.category,whoOf(i))};
-const packW=(w,sub)=>w?(sub?w+"|"+sub:w):"";
-const catW=i=>isInc(i)?(i.category||""):whoOf(i)+" ("+subOf(i)+")";
+const packW=(w,sub,kid)=>!w?"":w+((sub||kid)?"|"+(sub||""):"")+(w==="للعيال"&&kid?"|"+kid:"");
+const catW=i=>isInc(i)?(i.category||""):whoOf(i)==="للعيال"?"للعيال – "+kidOf(i)+" ("+purpOf(i)+")":whoOf(i)+" ("+subOf(i)+")";
 const isInc=i=>i.type==="دخل";
 const $=id=>document.getElementById(id);
 const fmt=n=>(Math.round(n*100)/100).toLocaleString("ar-EG");
@@ -205,23 +240,25 @@ async function aiParse(text){
 اسم البند يكون قصير وواضح بالعربي (كلمة لـ ٤ كلمات) من غير "صرفت" أو "اشتريت".
 تصنيف المصروف لازم يكون واحد من دول بالظبط: ${CATS.join("، ")}.
 تصنيف الدخل لازم يكون واحد من دول بالظبط: ${INC.join("، ")} ("مرتب" للمرتب، "مكافأة" للمكافأة، "لجنة" للجان، "حافز" للحوافز، "رصيد مرحّل" للفلوس اللي فاضلة من الشهر اللي فات، وأي دخل تاني "دخل إضافي")، واسم البند يكون زي ما الشخص قاله.
-لكل مصروف حدد "who" (المصروف ده لمين) واحد من دول بالظبط: "ليا" (مصاريفه الشخصية: قهوة، سجاير، فطاره، مواصلاته، حلاقة، لبسه، علاجه)، "لمراتي" (حاجة جابها للمدام أو طلبتها لنفسها)، "للبيت" (مصروف البيت اللي بيديه للمدام دفعات، وأكل وطلبات البيت: بقالة، خضار، لحمة، منظفات)، "للعيال" (حمزة وعمر: مدرسة، درس، سباحة، نادي، حضانة، توكتوك المدرسة، دكاترتهم وعلاجهم، فينو وفيتو للولاد، بامبرز)، "مرافق" (كهربا، مية، غاز، فواتير التليفون والنت). لو قال صراحة "ليا" أو "للعيال" أو "للبيت" أو "لمراتي" التزم بكلامه.
+لكل مصروف حدد "who" (المصروف ده لمين) من كلامه هو بس، واحد من دول بالظبط: "ليا" (قال ليا أو لنفسي)، "لمراتي" (قال لمراتي أو للمدام أو لزوجتي)، "للبيت" (قال للبيت، أو دفعة مصروف البيت للمدام)، "للعيال" (قال لحمزة أو لعمر أو للعيال أو للولاد، أو للمدرسة أو للدرس أو للحضانة أو للنادي أو للسباحة)، "مرافق" (فواتير كهربا، مية، غاز، تليفون، نت). لو ما قالش لمين صراحة ومش فاتورة مرافق ولا دفعة مصروف البيت، سيب "who" فاضي "" عشان هيتسأل، وممنوع تخمّن.
+ولو who = "للعيال" حدد "kid": "حمزة" لو قال لحمزة أو للمدرسة أو للدرس، "عمر" لو قال لعمر أو للحضانة، "مشترك" لو قال للعيال أو للولاد من غير اسم أو للنادي. متقسمش المبلغ بين الولدين أبداً.
+لو هو قسّم المبلغ بنفسه (مثلاً «تلات عصير بـ٧٥: ٢٥ لمراتي و٥٠ للعيال») طلّع كل جزء بند لوحده بمبلغه ولمينه.
 ولكل مصروف حدد "sub" = تفصيل قصير (كلمة لـ ٣ كلمات) يوضح المصروف ده إيه جوه خانته، أدق من التصنيف، زي: سباحة، حضانة عمر، دروس حمزة، دكاترة وتحاليل حمزة، توكتوك مدرسة حمزة، مواصلات النادي، توكتوك ومواصلات العيال، فينو وحلويات للعيال، بامبرز ولبن أطفال، قهوة ومشروبات برا، سجاير وفيب، فطار، أكل برا، مواصلات، حلاقة، كي هدوم، علاج وأدوية، اشتراكات، مصروف البيت (دفعات)، طلبات جبتها لها، بقالة وسوبرماركت، خضار وفاكهة، لحمة وفراخ وسمك، منظفات وأدوات منزلية، كهربا، مياه، غاز، تليفون ونت.
 لو الكلام بيقول "امبارح" حط day_offset = -1، "أول امبارح" = -2، غير كده 0.
-رد بـ JSON بس بالشكل ده: {"items":[{"type":"مصروف","item":"عيش","amount":10,"category":"عيش وفطار","who":"للبيت","sub":"عيش وفطار البيت","day_offset":0}]}
+رد بـ JSON بس بالشكل ده: {"items":[{"type":"مصروف","item":"عيش","amount":10,"category":"عيش وفطار","who":"للبيت","kid":"","sub":"عيش وفطار البيت","day_offset":0}]}
 لو مفيش أي مبلغ رد {"items":[]}.`;
   const r=await samp.json(prompt,{modelTier:"quick",cache:false});
   if(!r||!Array.isArray(r.items)) return null;
   return r.items.filter(x=>x&&+x.amount>0).map(x=>{const inc=x.type==="دخل";const L=inc?INC:CATS;
     return {type:inc?"دخل":"مصروف",item:String(x.item||"مصروف").slice(0,60),amount:+x.amount,
-    category:L.includes(x.category)?x.category:(inc?guessInc(String(x.item||"")):guessCat(String(x.item||""))),day_offset:Math.max(-7,Math.min(0,parseInt(x.day_offset)||0)),who:WHO.includes(x.who)?x.who:"",sub:String(x.sub||"").slice(0,30)}});
+    category:L.includes(x.category)?x.category:(inc?guessInc(String(x.item||"")):guessCat(String(x.item||""))),day_offset:Math.max(-7,Math.min(0,parseInt(x.day_offset)||0)),who:WHO.includes(x.who)?x.who:statedWho(x.item),kid:"",sub:String(x.sub||"").slice(0,30),_k:x.kid}}).map(x=>({...x,kid:x.who==="للعيال"?(KIDS.includes(x._k)?x._k:guessKid(x.item+" "+x.sub)):""}));
 }
 
 /* ---------- preview ---------- */
 let draft=[];
 function showPreview(){
   {const wi=$("whoIn"),v=wi?wi.value:"";draft.forEach(d=>{if(d.type==="دخل"||d.whoMan)return;
-    if(v){d.who=v;d.whoSet=1;d.whoIn=1}else if(d.whoIn){d.who="";d.whoSet=0;d.whoIn=0}})}
+    if(v){const q=uiToWK(v);d.who=q[0];d.kid=q[1];d.whoSet=1;d.whoIn=1}else if(d.whoIn){d.who="";d.kid="";d.whoSet=0;d.whoIn=0}})}
   const pv=$("pv"); pv.innerHTML="";
   if(!draft.length){pv.innerHTML='<div class="pvempty">اللي هتقوله هيظهر هنا متحسب لوحده، وتدوس احفظ</div>';return}
   const tip=document.createElement("div"); tip.className="pnote2"; tip.textContent="دوس على أي بند تعدّله"; pv.appendChild(tip);
@@ -238,16 +275,16 @@ function showPreview(){
     const c=document.createElement("select"); c.id="pvc"+k; c.setAttribute("aria-label","التصنيف");
     const fill=()=>{c.innerHTML="";(d.type==="دخل"?INC:CATS).forEach(n=>{const o=document.createElement("option");o.textContent=n;if(n===d.category)o.selected=true;c.appendChild(o)});d.category=c.value};
     const w=document.createElement("select"); w.id="pvw"+k; w.setAttribute("aria-label","لمين");
-    const wfill=()=>{w.innerHTML="";w.hidden=d.type==="دخل";if(w.hidden)return;if(!WHO.includes(d.who))d.who=guessWho(d.item,d.category);
-      WHO.forEach(n=>{const o=document.createElement("option");o.textContent=n;if(n===d.who)o.selected=true;w.appendChild(o)})};
-    fill(); wfill(); c.onchange=()=>{d.category=c.value;if(!d.whoSet){d.who="";wfill()}};
-    w.onchange=()=>{d.who=w.value;d.whoSet=1;d.whoMan=1};
+    const wfill=()=>{w.innerHTML="";w.hidden=d.type==="دخل";if(w.hidden)return;const cur=wkToUi(d.who,d.kid);
+      [""].concat(WHO_UI).forEach(n=>{const o=document.createElement("option");o.value=n;o.textContent=n||"⚠ لمين؟";if(n===cur)o.selected=true;w.appendChild(o)})};
+    fill(); wfill(); c.onchange=()=>{d.category=c.value};
+    w.onchange=()=>{const q=uiToWK(w.value);d.who=q[0];d.kid=q[1];d.whoSet=1;d.whoMan=1};
     ty.onchange=()=>{d.type=ty.value; fill(); wfill()};
     const sel=document.createElement("div"); sel.className="pvsel"; sel.append(ty,c,w);
     const sm=document.createElement("button"); sm.type="button"; sm.className="pvs";
     const upd=()=>{sm.className="pvs"+(d.type==="دخل"?" in":"");sm.innerHTML="";const n=document.createElement("span");n.textContent=d.item||"—";
       const v=document.createElement("span");v.className="a";v.textContent=(d.type==="دخل"?"+ ":"")+fmt(d.amount||0);
-      const cc=document.createElement("span");cc.className="c";cc.textContent=d.type==="دخل"?"دخل · "+(d.category||""):(d.who||"")+" ("+((!d.whoMan&&!d.whoIn&&d.sub)||guessSub(d.item,d.category,d.who))+")";sm.append(n,v,cc)};
+      const cc=document.createElement("span");cc.className="c";const noW=d.type!=="دخل"&&!d.who;cc.textContent=d.type==="دخل"?"دخل · "+(d.category||""):noW?"⚠ مقلتش لمين — دوس هنا واختار":wkToUi(d.who,d.kid)+" ("+((!d.whoMan&&!d.whoIn&&d.sub)||guessSub(d.item,d.category,d.who))+")";cc.style.color=noW?"var(--danger)":"";cc.style.fontWeight=noW?"600":"";sm.append(n,v,cc)};
     upd(); sm.onclick=()=>r.classList.toggle("open");
     r.addEventListener("input",upd); r.addEventListener("change",upd);
     r.append(sm,t,a,x,sel); pv.appendChild(r);
@@ -259,10 +296,12 @@ function showPreview(){
   const ok=document.createElement("button"); ok.className="primary"; ok.type="button"; ok.textContent="احفظ";
   ok.onclick=async()=>{
     ok.disabled=true;
+    const miss=draft.filter(x=>x.amount>0&&(x.type||"مصروف")!=="دخل"&&!WHO.includes(x.who));
+    if(miss.length){ok.disabled=false;setSt("قولي لمين: "+miss.map(x=>x.item).join("، "),true);pv.querySelectorAll(".pv").forEach((r,k)=>{if(miss.includes(draft[k]))r.classList.add("open")});return}
     const base=$("d").value||todayIso();
     const list=draft.filter(x=>x.amount>0).map(x=>{const [y,m,dd]=base.split("-").map(Number);
       const dt=new Date(y,m-1,dd+(x.day_offset||0));
-      return {type:x.type||"مصروف",item:x.item.trim()||"مصروف",amount:x.amount,category:x.category,date:iso(dt),ts:Date.now(),note:(x.type||"مصروف")==="دخل"?"":(()=>{const w=WHO.includes(x.who)?x.who:guessWho(x.item,x.category);return packW(w,(x.whoMan||x.whoIn||!x.sub)?guessSub(x.item,x.category,w):x.sub)})()}});
+      return {type:x.type||"مصروف",item:x.item.trim()||"مصروف",amount:x.amount,category:x.category,date:iso(dt),ts:Date.now(),note:(x.type||"مصروف")==="دخل"?"":(()=>{const w=WHO.includes(x.who)?x.who:guessWho(x.item,x.category);return packW(w,(x.whoMan||x.whoIn||!x.sub)?guessSub(x.item,x.category,w):x.sub,w==="للعيال"?(x.kid||guessKid(x.item+" "+(x.sub||""))):"")})()}});
     try{await addItems(list); setSt("اتحفظ "+list.length+" بند ✓"); draft=[]; pvDirty=false; lastParsed=""; clearTimeout(autoT); showPreview(); $("say").value=""; $("whoIn").value="";}
     catch(e){setSt("محصلش حفظ، جرب تاني",true); ok.disabled=false}
   };
@@ -286,7 +325,7 @@ $("go").onclick=async()=>{
   const my=++parseSeq; lastParsed=text; setSt("بفهم الكلام…");
   let res=null;
   try{res=await aiParse(text)}catch(e){res=null}
-  if(!res||!res.length){res=localParse(text).map(x=>({...x,day_offset:/امبارح|إمبارح/.test(text)?-1:0}))}
+  if(!res||!res.length){res=localParse(text).map(x=>{const w=x.type==="دخل"?"":statedWho(x.item);return {...x,who:w,kid:w==="للعيال"?guessKid(x.item):"",day_offset:/امبارح|إمبارح/.test(text)?-1:0}})}
   if(my!==parseSeq||text!==$("say").value.trim()) return;
   if(pvDirty&&draft.length){setSt("");return}
   if(!res.length){draft=[];showPreview();setSt("قول المبلغ مع كل حاجة، زي: عيش بعشرة جنيه",true);return}
@@ -312,7 +351,7 @@ $("go").onclick=async()=>{
   function stopLive(){try{if(sr){const s=sr;sr=null;s.onend=null;s.stop()}}catch(e){}}
   async function fromText(text){
     let res=null; try{res=await aiParse(text)}catch(e){}
-    if(!res||!res.length) res=localParse(text).map(x=>({...x,day_offset:/امبارح|إمبارح/.test(text)?-1:0}));
+    if(!res||!res.length) res=localParse(text).map(x=>{const w=x.type==="دخل"?"":statedWho(x.item);return {...x,who:w,kid:w==="للعيال"?guessKid(x.item):"",day_offset:/امبارح|إمبارح/.test(text)?-1:0}});
     return res;
   }
   function show(its){
@@ -340,7 +379,7 @@ $("go").onclick=async()=>{
         const r=await window.mApi({action:"parse",audio:b64,mime:"audio/wav",today:todayIso()},45000);
         const said=(r.transcript||"").trim();
         if(said){ta.value=(base?base+" ":"")+said; lastParsed=ta.value.trim()}
-        show((r.items||[]).map(x=>({type:x.type,item:x.item,amount:+x.amount,category:x.category,who:x.who||"",sub:x.sub||"",day_offset:x.day_offset||0})));
+        show((r.items||[]).map(x=>{const st=statedWho((x.item||"")+" "+(x.sub||"")),w=x.type==="دخل"?"":(st||(x.who&&statedWho(said)===x.who?x.who:""));return {type:x.type,item:x.item,amount:+x.amount,category:x.category,who:w,kid:w==="للعيال"?(KIDS.includes(x.kid)?x.kid:guessKid((x.item||"")+" "+(x.sub||"")+" "+said)):"",sub:x.sub||"",day_offset:x.day_offset||0}}));
       }
     }catch(e){
       if(live){ setSt("بفهم من الكلام المكتوب…"); try{show(await fromText(live))}catch(_){setSt("محصلش فهم، جرّب تاني",true)} }
@@ -367,10 +406,10 @@ function editForm(i){
   const fill=()=>{const L0=d.type==="دخل"?INC:CATS;const L=L0.includes(d.category)?L0:[d.category].concat(L0);c.innerHTML="";
     L.forEach(n=>{const o=document.createElement("option");o.textContent=n;if(n===d.category)o.selected=true;c.appendChild(o)})};
   const w=document.createElement("select");w.id="edw";w.className="full";w.setAttribute("aria-label","لمين");
-  const wfill=()=>{w.innerHTML="";w.hidden=d.type==="دخل";if(!WHO.includes(d.who))d.who=guessWho(d.item,d.category);
-    WHO.forEach(n=>{const o=document.createElement("option");o.textContent="لمين: "+n;o.value=n;if(n===d.who)o.selected=true;w.appendChild(o)})};
+  const wfill=()=>{w.innerHTML="";w.hidden=d.type==="دخل";if(!WHO.includes(d.who))d.who=guessWho(d.item,d.category);const cur=wkToUi(d.who,d.kid);
+    WHO_UI.forEach(n=>{const o=document.createElement("option");o.textContent="لمين: "+n;o.value=n;if(n===cur)o.selected=true;w.appendChild(o)})};
   const su=document.createElement("input");su.type="text";su.id="eds";su.className="full";su.value=d.sub||"";su.placeholder="التفصيل (مثلاً: سباحة، دروس حمزة، قهوة)";su.setAttribute("aria-label","التفصيل");su.oninput=()=>{d.sub=su.value};
-  fill(); wfill(); c.onchange=()=>{d.category=c.value}; ty.onchange=()=>{d.type=ty.value;fill();wfill();su.hidden=d.type==="دخل"}; w.onchange=()=>{d.who=w.value}; su.hidden=d.type==="دخل";
+  fill(); wfill(); c.onchange=()=>{d.category=c.value}; ty.onchange=()=>{d.type=ty.value;fill();wfill();su.hidden=d.type==="دخل"}; w.onchange=()=>{const q=uiToWK(w.value);d.who=q[0];d.kid=q[1]}; su.hidden=d.type==="دخل";
   const dt=document.createElement("input");dt.type="date";dt.id="edd";dt.className="full";dt.value=d.date;dt.setAttribute("aria-label","التاريخ");dt.onchange=()=>{d.date=dt.value};
   const b=document.createElement("div");b.className="btns";
   const ok=document.createElement("button");ok.type="button";ok.className="primary";ok.textContent="احفظ التعديل";
@@ -379,7 +418,7 @@ function editForm(i){
   ok.onclick=async()=>{
     if(!(d.amount>0)){setSt("اكتب مبلغ أكبر من صفر",true);return}
     ok.disabled=true;
-    const id=editId; const data={item:d.item.trim()||"مصروف",amount:d.amount,type:d.type,category:d.category,date:d.date||i.date,note:d.type==="دخل"?"":packW(d.who||"",(d.sub||"").trim())};
+    const id=editId; const data={item:d.item.trim()||"مصروف",amount:d.amount,type:d.type,category:d.category,date:d.date||i.date,note:d.type==="دخل"?"":packW(d.who||"",(d.sub||"").trim(),d.who==="للعيال"?(d.kid||"مشترك"):"")};
     try{editId=null;editDraft=null;await updateItem(id,data);setSt("اتعدّل: "+data.item);render()}
     catch(e){editId=id;editDraft=d;ok.disabled=false;setSt("محصلش حفظ للتعديل، جرب تاني",true)}
   };
@@ -488,8 +527,8 @@ async function syncMonthTabs(mcp,rows){
     vals.push(["","المتبقي (الدخل - المصروف)","",ARF(`SUM(F4:F${last})-SUM(G4:G${last})`),"","",""]);
     {const bw={};WHO.forEach(w=>bw[w]=0);its.filter(i=>!isInc(i)).forEach(i=>bw[whoOf(i)]+=(+i.amount||0));
      vals.push(E7.slice());vals.push(["","المصروف حسب لمين","","","","",""]);
-     WHO.forEach(w=>{vals.push(["",WHO_L[w],"","",AN(bw[w]),"",""]);const sub={};
-       its.filter(i=>!isInc(i)&&whoOf(i)===w).forEach(i=>{const c=subOf(i);sub[c]=(sub[c]||0)+(+i.amount||0)});
+     WHO.forEach(w=>{vals.push(["",WHO_L[w],"","",AN(bw[w]),"",""]);const sub={};if(w==="للعيال")KIDS.forEach(k=>vals.push(["","– "+KID_L[k],"","",AN(its.filter(i=>!isInc(i)&&whoOf(i)===w&&kidOf(i)===k).reduce((s,i)=>s+(+i.amount||0),0)),"",""]));
+       its.filter(i=>!isInc(i)&&whoOf(i)===w).forEach(i=>{const c=w==="للعيال"?purpOf(i):subOf(i);sub[c]=(sub[c]||0)+(+i.amount||0)});
        Object.entries(sub).sort((a,b)=>b[1]-a[1]).forEach(([c,x])=>vals.push(["","("+c+")","","",AN(x),"",""]))});}
     let prev=0; try{prev=parseInt(localStorage.getItem("gsT:"+k))||0}catch(e){}
     const total=Math.max(vals.length,prev)+10;
@@ -563,14 +602,19 @@ function render(){
     r.append(n,b,s);cats.appendChild(r)});
   {const bw={};WHO.forEach(w=>bw[w]=0);let gs=0;monItems.forEach(i=>{bw[whoOf(i)]+=(+i.amount||0);if(!whoSure(i))gs++});
    const mx=Math.max(0,...Object.values(bw)),box=$("whos");box.innerHTML="";
-   WHO.forEach(w=>{const sub={};monItems.forEach(i=>{if(whoOf(i)===w){const c=subOf(i);sub[c]=(sub[c]||0)+(+i.amount||0)}});
+   WHO.forEach(w=>{const sub={},kf=i=>w==="للعيال"?KID_L[kidOf(i)]+" – "+purpOf(i):subOf(i);monItems.forEach(i=>{if(whoOf(i)===w){const c=kf(i);sub[c]=(sub[c]||0)+(+i.amount||0)}});
      const det=document.createElement("details");det.className="dtc";const sm=document.createElement("summary");
      const n=document.createElement("span");n.className="n";n.textContent=WHO_L[w];const v=document.createElement("span");v.className="v";v.textContent=fmt(bw[w])+" ج";
      sm.append(n,v);det.appendChild(sm);
+     if(w==="للعيال"){const L=monItems.filter(i=>whoOf(i)===w),S=a=>a.reduce((s,i)=>s+(+i.amount||0),0),E=t=>String(t).replace(/[&<>"]/g,c=>"&#"+c.charCodeAt(0)+";");
+       const kb=document.createElement("div");kb.style.cssText="margin-inline-start:14px;padding:2px 0 6px";
+       kb.innerHTML=KIDS.map(k=>'<div class="kv"><span>'+KID_L[k]+'</span><b>'+fmt(S(L.filter(i=>kidOf(i)===k)))+' ج</b></div>').join("")+
+         '<div class="mgrp">العيال حسب الغرض</div>'+Object.entries(L.reduce((m,i)=>{const p=purpOf(i);m[p]=(m[p]||0)+(+i.amount||0);return m},{})).sort((a,b)=>b[1]-a[1]).map(([p,x])=>'<div class="kv"><span>'+E(p)+'</span><b>'+fmt(x)+' ج</b></div>').join("")+'<div class="mgrp">التفاصيل بند بند</div>';
+       det.appendChild(kb)}
      Object.entries(sub).sort((a,b)=>b[1]-a[1]).forEach(([c,x])=>{const sd=document.createElement("details");sd.className="dtc";sd.style.marginInlineStart="14px";
        const ss=document.createElement("summary");const a=document.createElement("span");a.className="n";a.textContent="("+c+")";
        const b=document.createElement("span");b.className="v";b.textContent=fmt(x);ss.append(a,b);sd.appendChild(ss);
-       monItems.filter(i=>whoOf(i)===w&&subOf(i)===c).sort((p,q)=>p.date<q.date?-1:p.date>q.date?1:0).forEach(i=>{const r=document.createElement("div");r.className="res";
+       monItems.filter(i=>whoOf(i)===w&&kf(i)===c).sort((p,q)=>p.date<q.date?-1:p.date>q.date?1:0).forEach(i=>{const r=document.createElement("div");r.className="res";
          const t=document.createElement("span");t.textContent=i.item;const v2=document.createElement("span");v2.className="a";v2.textContent=fmt(+i.amount||0);
          const dd=document.createElement("span");dd.className="c";dd.textContent=dFull(i.date);r.append(t,v2,dd);sd.appendChild(r)});
        det.appendChild(sd)});
@@ -599,12 +643,12 @@ function render(){
     h.append(a,rr);g.appendChild(h);
     days[d].forEach(i=>{const r=document.createElement("div");r.className="ent"+(isInc(i)?" in":"");
       const t=document.createElement("div");t.className="t";t.textContent=i.item;
-      const c=document.createElement("span");c.className="c";c.textContent=isInc(i)?"دخل · "+(i.category||""):whoOf(i)+(whoSure(i)?"":"؟")+" ("+(i.category||"مصروف البيت")+")";t.appendChild(c);
+      const c=document.createElement("span");c.className="c";c.textContent=isInc(i)?"دخل · "+(i.category||""):(whoOf(i)==="للعيال"?"للعيال – "+kidOf(i):whoOf(i))+(whoSure(i)?"":"؟")+" ("+(i.category||"مصروف البيت")+")";t.appendChild(c);
       const v=document.createElement("span");v.className="a";v.textContent=(isInc(i)?"+ ":"")+fmt(+i.amount||0);
       if(editId===i.id){g.appendChild(editForm(i));return}
       const acts=document.createElement("span");acts.className="acts";
       const ed=document.createElement("button");ed.type="button";ed.className="ed";ed.textContent="تعديل";ed.setAttribute("aria-label","عدّل "+i.item);
-      ed.onclick=()=>{editId=i.id;editDraft={item:i.item,amount:+i.amount||0,type:isInc(i)?"دخل":"مصروف",category:i.category||"مصروف البيت",date:i.date,who:isInc(i)?"":whoOf(i),sub:isInc(i)?"":subOf(i)};render()};
+      ed.onclick=()=>{editId=i.id;editDraft={item:i.item,amount:+i.amount||0,type:isInc(i)?"دخل":"مصروف",category:i.category||"مصروف البيت",date:i.date,who:isInc(i)?"":whoOf(i),kid:isInc(i)?"":kidOf(i),sub:isInc(i)?"":subOf(i)};render()};
       const x=document.createElement("button");x.type="button";x.className="rm";x.textContent="مسح";x.setAttribute("aria-label","امسح "+i.item);
       x.onclick=()=>{ if(x.classList.contains("c")){x.disabled=true;removeItem(i.id).then(()=>setSt("اتمسح: "+i.item)).catch(()=>setSt("محصلش مسح، جرب تاني",true))} else {x.classList.add("c");x.textContent="متأكد؟";
         setTimeout(()=>{if(x.isConnected&&!x.disabled){x.classList.remove("c");x.textContent="مسح"}},3000)} };
@@ -774,7 +818,7 @@ $("xl").onclick=async()=>{
     if(!e.length) return '<div class="empty">مفيش مصروف</div>';
     return '<div class="cats">'+e.map(([c,v])=>'<div class="cat"><span>'+esc(c)+'</span><div class="bar"><i style="width:'+(mx?v/mx*100:0)+'%"></i></div><span class="v">'+fmt(v)+'</span></div>').join("")+'</div>'}
   function whoCard(list){if(!list.length)return "";const bw={};WHO.forEach(w=>bw[w]=0);list.forEach(i=>bw[whoOf(i)]+=(+i.amount||0));
-    return '<section class="card"><h2>حسب لمين</h2>'+WHO.map(w=>'<div class="kv"><span>'+WHO_L[w]+'</span><b>'+fmt(bw[w])+' ج</b></div>').join("")+'</section>'}
+    return '<section class="card"><h2>حسب لمين</h2>'+WHO.map(w=>'<div class="kv"><span>'+WHO_L[w]+'</span><b>'+fmt(bw[w])+' ج</b></div>'+(w==="للعيال"?KIDS.map(k=>'<div class="kv" style="padding-inline-start:16px;font-size:.88rem"><span>'+KID_L[k]+'</span><b>'+fmt(list.filter(i=>whoOf(i)===w&&kidOf(i)===k).reduce((s,i)=>s+(+i.amount||0),0))+' ج</b></div>').join(""):"")).join("")+'</section>'}
   function nav(id,title,sub){return '<nav class="mnav"><button type="button" id="'+id+'P" aria-label="اللي قبله">›</button><div class="mt"><b>'+title+'</b><small>'+sub+'</small></div><button type="button" id="'+id+'N" aria-label="اللي بعده">‹</button></nav>'}
   function draw(){
     if(!view) return; const t=todayIso();
