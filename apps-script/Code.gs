@@ -15,7 +15,8 @@ const COLS = ['id', 'type', 'date', 'item', 'category', 'amount', 'ts', 'status'
 /* للصوت: Flash الكامل بيفهم العامية المصري أحسن بكتير من Lite، والـ Lite احتياطي */
 const ALL_MODELS = ['gemini-flash-latest', 'gemini-3.5-flash', 'gemini-3.5-flash-lite', 'gemini-flash-lite-latest', 'gemini-2.5-flash'];
 /* الترتيب الأسرع بيتحفظ لما تشغّل test() */
-const MODELS = (PropertiesService.getScriptProperties().getProperty('MODEL_ORDER') || ALL_MODELS.join(',')).split(',');
+/* الأسرع الأول، وبعده باقي الموديلات احتياطي لو اللي فوق مضغوط (503) */
+const MODELS = (o => o.concat(ALL_MODELS.filter(x => o.indexOf(x) < 0)))((PropertiesService.getScriptProperties().getProperty('MODEL_ORDER') || '').split(',').filter(Boolean));
 
 const CATS = ["مصروف البيت","بقالة وسوبرماركت","خضار وفاكهة","لحوم وفراخ وسمك","عيش وفطار","أكل برا وديليفري","قهوة وشاي ومشروبات","حلويات وتسالي","مواصلات","عربية وبنزين","إيجار وأقساط سكن","كهربا وميه وغاز","تليفون ونت","صيانة وتصليحات","أدوات منزلية ومنظفات","أولاد ومدارس","دروس وتعليم","دكاترة وتحاليل","أدوية وصيدلية","حلاقة وعناية شخصية","لبس وجزم","خروجات وترفيه","سفر ومصايف","هدايا ومناسبات","صدقات وزكاة","جمعيات وأقساط","اشتراكات ونادي","سجاير","شغل ومصاريف مهنية"];
 const INC = ["مرتب", "مكافأة", "لجنة", "حافز", "دخل إضافي", "رصيد مرحّل"];
@@ -199,7 +200,8 @@ function ready(items, today) {
   }));
   const total = items.filter(x => x.type !== 'دخل').reduce((s, x) => s + x.amount, 0);
   const inc = items.filter(x => x.type === 'دخل').reduce((s, x) => s + x.amount, 0);
-  const summary = items.length ? items.map(x => (x.type === 'دخل' ? 'دخل: ' : '') + x.item + ' ' + ar(x.amount) + ' ج (' + x.category + (x.who ? ' · ' + x.who : '') + ')').join('\n') +
+  const summary = items.length ? items.map(x => (x.type === 'دخل' ? 'دخل: ' : '') + x.item + ' ' + ar(x.amount) + ' ج (' + x.category + (x.type === 'دخل' ? '' : x.who ? ' · ' + (x.who === 'للعيال' && x.kid && x.kid !== 'مشترك' ? 'ل' + x.kid : x.who) : ' · ⚠ مقلتش لمين') + ')').join('\n') +
+    (items.some(x => x.type !== 'دخل' && !x.who) ? '\n⚠ فيه بند مش متحدد لمين: دوس إلغاء وقولها تاني ومعاها لمين' : '') +
     (total ? '\nإجمالي المصروف ' + ar(total) + ' ج' : '') + (inc ? '\nإجمالي الدخل ' + ar(inc) + ' ج' : '') : 'مسمعتش مبلغ';
   const token = Utilities.getUuid().slice(0, 8);
   if (docs.length) CacheService.getScriptCache().put('t_' + token, JSON.stringify(docs), 1800);
